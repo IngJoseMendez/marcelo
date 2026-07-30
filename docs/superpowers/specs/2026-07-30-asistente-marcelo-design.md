@@ -1,0 +1,456 @@
+# Asistente autónoma de correo, agenda y finanzas — Diseño
+
+**Fecha:** 2026-07-30
+**Cliente:** Marcelo (usuario único)
+**Origen:** nota de voz de 62 s enviada por el cliente
+
+---
+
+## 1. Origen y transcripción
+
+El cliente envió una nota de voz que arranca a mitad de conversación. Transcrita
+localmente con `faster-whisper` (`large-v3-turbo`) tras normalizar volumen con
+ffmpeg. Fragmentos clave, textuales:
+
+> "...una parte financiera, que ella misma sea capaz de detectar... son los
+> correos que me llegan... que ella misma coja esa información, la transporte,
+> la traduzca y la meta en su vaina."
+
+> "Y lo mismo con la agenda. Yo le tengo dicho que todos los miércoles tengo
+> clase de 4 a 5, y el profesor nos manda un correo y dice 'no, la clase de hoy
+> se cancela'. Que sea capaz de entenderlo... **ella misma cambia la agenda y
+> cambia el horario, o lo quita directamente y no tenga que avisarme nada de
+> eso**."
+
+Hallazgo medido durante la transcripción, relevante para el diseño: con el
+acento costeño del cliente, `whisper-small` produjo salida inservible (3
+fragmentos de 62 s), `medium` inventó palabras, y `large-v3-turbo` transcribió
+limpio. **La calidad de transcripción no es negociable en este proyecto.**
+
+## 2. Qué se construye
+
+Una asistente personal autónoma que:
+
+1. **Lee el correo de Marcelo** y detecta lo accionable.
+2. **Modifica su Google Calendar sola** cuando un correo cancela, mueve o cambia
+   un compromiso que ella conoce.
+3. **Lleva un libro contable** alimentado de correos bancarios y de pagos, con
+   conversión a COP, categorización, cuentas por pagar y alertas de vencimiento.
+4. **Recibe órdenes habladas** por Telegram: él le enseña compromisos, consulta,
+   corrige y deshace, todo por nota de voz.
+5. **Rinde cuentas** en un resumen diario y en un panel web móvil.
+
+## 3. Decisiones tomadas
+
+| Decisión | Elección | Motivo |
+|---|---|---|
+| Alcance | Usuario único (Marcelo) | Evita verificación de Google y auditoría CASA |
+| Correo/Calendario | Google (Gmail + Calendar) | Push por Pub/Sub; excepciones nativas en series recurrentes |
+| Canal de control | Telegram | Sin ventana de 24 h ni plantillas; notas de voz nativas; gratis |
+| Autonomía | Graduada + deshacer + resumen diario | Cumple "no me avises" sin dejarlo ciego |
+| Arranque | Modo sombra 2 semanas | Medir precisión antes de soltar la correa |
+| Finanzas | Libro completo + alertas + cuentas por pagar | Elección explícita del cliente |
+| Arquitectura | Núcleo determinista, LLM acotado | Determinismo donde se borra y se cuenta plata |
+| Proveedor LLM | **Groq (free tier) con ZDR activado** | No entrena con datos de clientes ni por tier; Zero Data Retention disponible |
+| Modelos locales | **Descartados** | 1650 Mobile = 4 GB VRAM → techo ~4B, justo donde falla la extracción |
+| Host del servicio | Laptop dedicada de Marcelo | Siempre prendida y sin uso; batería = UPS. Oracle Always Free descartado: reclama instancias con CPU p95 < 20 % en 7 días, que es exactamente nuestro perfil |
+| Panel | Next.js en Vercel (PWA) | Móvil, instalable, separado del backend |
+
+**No se reutiliza `angie-secretaria` ni ningún proyecto previo como base.**
+
+## 4. Arquitectura
+
+Dos entradas, un solo motor que muta estado:
+
+```
+Gmail ──push (Pub/Sub)──▶ PIPELINE DE CORREO
+                          ingesta → clasifica → extrae → resuelve ─┐
+                                                                   │
+                                                                   ├─▶ POLÍTICA
+Telegram ────────────────▶ CANAL DE INSTRUCCIONES                  │   ACTÚA
+                          ¿voz? → transcriptor → texto             │   AUDITA
+                          texto → intérprete ─────────────────────┘    NOTIFICA
+```
+
+Regla estructural: **un solo lugar en todo el sistema muta estado.** Ambas
+entradas desembocan en la misma política, el mismo actuador, la misma auditoría
+y el mismo deshacer. Sólo difiere la parte de *entender*.
+
+### Principio rector
+
+> **El LLM para entender. El código para decidir y actuar.**
+
+El LLM se usa en exactamente cuatro puntos, todos con entrada y salida tipadas:
+
+| Punto | Trabajo | Salida |
+|---|---|---|
+| Clasificar | ¿agenda, finanzas o ruido? | enum + confianza |
+| Extraer | leer el texto y sacar hechos | objeto validado con Zod |
+| Desempatar | elegir entre candidatos concretos | id de la lista + justificación |
+| Interpretar | orden hablada → herramienta | llamada a herramienta acotada |
+
+Todo lo demás —deduplicación, resolución de entidades, política de autonomía,
+escritura a Calendar, libro contable, auditoría, deshacer— es código puro y
+testeable.
+
+### Puertos
+
+| Puerto | Implementación real | Implementación falsa |
+|---|---|---|
+| `FuenteCorreo` | Gmail API | fixtures JSON |
+| `SumideroCalendario` | Google Calendar API | calendario en memoria |
+| `LibroContable` | Postgres | en memoria |
+| `Notificador` | Telegram | array de mensajes |
+| `Transcriptor` | Groq Whisper | texto fijo |
+| `ProveedorLLM` | Groq (API compatible con OpenAI) | respuestas guionadas |
+| `Reloj` | `Date` real | tiempo congelado |
+
+Tres consecuencias que justifican los puertos:
+
+1. La suite de pruebas corre **sin red**, en segundos.
+2. `Reloj` inyectable permite probar *"llega el martes a las 11 pm un correo que
+   dice 'la clase de mañana se cancela'"* sin esperar al martes. Sin esto, la
+   mitad de los casos de agenda son improbables.
+3. **El modo sombra es un cambio de puerto**, no un flujo aparte: se sustituye
+   `SumideroCalendario` por uno que sólo graba. Mismo pipeline, misma decisión —
+   por eso lo medido en sombra predice el comportamiento real.
+
+### Stack
+
+**Backend:** Node 20 · TypeScript · Fastify · PostgreSQL · Zod · **Luxon** ·
+node-cron · pino · `googleapis` · `grammy` (Telegram) · SDK compatible con
+OpenAI apuntando a Groq · Docker Compose.
+
+**Panel:** Next.js (App Router) en Vercel · PWA instalable · mobile-first.
+
+Notas no obvias:
+
+- **Luxon con `America/Bogota` en todo el sistema.** "Miércoles de 4 a 5" es hora
+  de Bogotá, Google Calendar devuelve UTC, y los correos pueden venir de
+  plataformas con horario de verano. Un error de zona horaria en un sistema de
+  agenda mueve una clase un día entero.
+- **Groq expone API compatible con OpenAI**, así que `ProveedorLLM` funciona con
+  cualquier endpoint compatible. Cambiar de proveedor es una variable de entorno.
+- Los identificadores de modelo van en configuración
+  (`GROQ_MODELO_CLASIFICADOR`, `GROQ_MODELO_EXTRACTOR`,
+  `GROQ_MODELO_TRANSCRIPTOR`) y **deben verificarse contra el catálogo vigente de
+  Groq el primer día**, no darse por sentados.
+
+## 5. Modelo de datos
+
+```
+compromisos            id · titulo · alias[] · rrule · hora_inicio · hora_fin
+                       tz · google_calendar_id · google_event_id
+                       remitentes_vinculados[] · activo
+
+correos_procesados     message_id UNIQUE · thread_id · remitente · asunto
+                       recibido_en · clasificacion · estado · procesado_en
+
+acciones               id · tipo · origen(correo|voz|texto) · correo_id
+                       confianza · objetivo · payload_aplicado
+                       payload_inverso · estado(aplicada|deshecha|sombra|
+                       pendiente) · creada_en · deshecha_en
+
+movimientos            id · fecha · tipo(ingreso|egreso) · monto · moneda
+                       monto_cop · trm · contraparte · concepto · categoria
+                       correo_id · hash_dedup UNIQUE · estado
+
+cuentas_por_pagar      id · acreedor · monto · moneda · vence_el · estado
+                       movimiento_id · avisado_en · correo_id
+
+reglas                 id · tipo · patron · accion · creada_por · creada_en
+
+pendientes_resumen     id · texto · prioridad · enviado_en
+
+estado_sync            historyId de Gmail · ultimo_watch_renovado_en · latido
+```
+
+## 6. Pipeline de correo
+
+1. **Prefiltro sin costo.** Categorías nativas de Gmail
+   (`CATEGORY_PROMOTIONS`, `CATEGORY_SOCIAL`), lista de remitentes conocidos y
+   reglas del usuario. Elimina ~80 % del volumen sin gastar un token.
+2. **Ingesta.** Deduplicación por `message_id`, normalización de texto.
+3. **Clasificar.** Modelo barato → `agenda | finanzas | ruido` + confianza.
+4. **Extraer.** Modelo bueno + esquema Zod → hechos tipados. **El modelo nunca
+   calcula fechas**: devuelve el referente en crudo (`"hoy"`,
+   `"próximo miércoles"`, `"el 6"`) y Luxon lo resuelve contra la fecha real de
+   Bogotá. Esto le quita al modelo justo lo que peor hace y baja el listón de
+   calidad requerido.
+5. **Resolver.** Cascada determinista (sección 8).
+6. **Política.** Tabla de decisión (sección 9).
+7. **Actuar.** Google Calendar / libro contable.
+8. **Auditar.** Acción + operación inversa.
+9. **Notificar.** Inmediato o al resumen de las 21:00.
+
+## 7. Canal de instrucciones por voz
+
+Telegram por **long polling** — no requiere IP pública ni puertos abiertos.
+
+Audio recibido → descarga → normalización de volumen (las notas de voz llegan
+bajas y eso degrada la transcripción; verificado con el audio real del cliente)
+→ `Transcriptor` → texto → intérprete.
+
+El intérprete mapea a **herramientas acotadas**, nunca a acciones libres:
+
+`enseñar_compromiso` · `consultar_agenda` · `consultar_finanzas` ·
+`crear_recordatorio` · `corregir` · `deshacer` · `crear_regla` ·
+`ignorar_remitente`
+
+### Dos reglas que la voz obliga
+
+**El origen decide la desconfianza.** Un correo es input no confiable y pasa por
+el filtro de confianza. Una orden escrita por Marcelo es confiable.
+
+**Pero una voz transcrita no es texto confiable.** Si *"cancela la clase de
+mañana"* se transcribe como *"cancela la clase de semana"*, hay una acción
+destructiva sobre input corrupto. Por eso: **toda acción destructiva originada en
+voz confirma**, devolviendo lo entendido:
+
+```
+Entendí: cancelar «Reunión con Andrés»
+         viernes 8 ago · 3:00 pm
+         [ Confirmar ]   [ No, esa no ]
+```
+
+Un toque, y de paso él verifica la transcripción. Enseñar un compromiso o
+consultar no confirma: actúa y muestra qué entendió.
+
+**Audios malos o divagantes.** El transcriptor devuelve confianza por segmento.
+Con confianza baja, la asistente pregunta en vez de adivinar. Si de una nota
+salen una instrucción clara y dos vagas, **ejecuta la clara y repregunta sólo por
+las vagas** — no descarta el audio entero ni rellena lo que faltó.
+
+## 8. Resolución de entidades
+
+El problema central: llega *"la clase de hoy se cancela"* — ¿a cuál de sus
+eventos apunta?
+
+Cuatro señales con peso, **todas calculadas en código**:
+
+| Señal | Ejemplo |
+|---|---|
+| Remitente vinculado | viene del prof. Ramírez → apunta a Cálculo (peso alto) |
+| Ventana temporal | referente `"hoy"` → Luxon lo vuelve rango en Bogotá → qué instancias caen ahí |
+| Alias en el texto | "cálculo", "clase", nombre del profesor en asunto o cuerpo |
+| Hilo | respuesta de un hilo ya resuelto → mismo compromiso |
+
+Resultado:
+
+```
+1 candidato, puntaje alto   → resuelto             → actúa callada
+1 candidato, puntaje medio  → resuelto con dudas   → actúa + avisa
+2+ empatados                → desempate por LLM
+0 candidatos                → pregunta
+```
+
+### Garantía estructural
+
+En el desempate **el LLM nunca genera un identificador**: recibe 2 o 3
+candidatos concretos y devuelve cuál de ésos. Si responde algo fuera de la lista,
+la respuesta se descarta y se pregunta.
+
+Esto convierte una alucinación en una pregunta, jamás en un borrado. Es
+**imposible que elimine un evento que no estaba entre los candidatos** — no
+porque el modelo sea bueno, sino porque el código no le da la opción.
+
+## 9. Política de autonomía
+
+Entra `{origen, tipo, confianza, reversible}` y sale una decisión. Código puro:
+
+| Origen | Confianza | Acción | Decisión |
+|---|---|---|---|
+| correo | alta | cancelar/mover **una instancia** | actúa callada → al resumen |
+| correo | alta | borrar **la serie completa** | actúa + avisa (destructivo) |
+| correo | media | cualquiera | actúa + avisa |
+| correo | baja | cualquiera | pregunta |
+| correo | — | registrar movimiento | registra callada (es lectura) |
+| voz | — | destructiva | confirma |
+| voz | — | no destructiva | actúa + eco de lo entendido |
+| texto | — | cualquiera | actúa |
+
+Las reglas dictadas por el usuario tienen precedencia: *"de Bancolombia no me
+avises"* → registra igual, pero calla.
+
+## 10. Deshacer y auditoría
+
+La operación inversa se guarda **antes** de aplicar la acción:
+
+| Acción | Inversa almacenada |
+|---|---|
+| cancelar instancia | el evento completo → recrear |
+| mover evento | la hora anterior |
+| borrar serie | la serie entera con su RRULE |
+| registrar movimiento | el id → se **anula**, no se borra |
+
+La auditoría es **append-only**: deshacer no borra el registro, agrega uno nuevo.
+Siempre queda el rastro de qué pasó, por cuál correo y con qué confianza.
+
+Vías: botón en Telegram (persiste, es un mensaje), `/deshacer` para la última,
+`/deshacer <id>` para una específica, o hablado.
+
+## 11. Resumen diario (21:00)
+
+```
+🌙  Hoy hice esto por ti:
+
+📅  Cancelé «Cálculo» del miércoles 6
+    correo del prof. Ramírez · 2:14 pm
+
+💰  3 movimientos  +$1.240.000  −$89.900  −$45.000
+
+⏰  Vence en 2 días: arriendo $1.800.000
+
+    [ Ver detalle ]   [ Deshacer algo ]
+```
+
+**Si no hizo nada, no manda nada.** Una asistente que escribe a diario "no pasó
+nada" se vuelve ruido en una semana.
+
+## 12. Modo sombra
+
+Semanas 1–2: `SumideroCalendario` se sustituye por `SumideroSombra`. Todo corre
+idéntico, pero en vez de tocar el calendario graba `estado='sombra'`. El resumen
+cambia de tono a *"esto es lo que habría hecho hoy"* y Marcelo marca ✓ o ✗.
+
+**Criterio de graduación: ≥ 95 % de aciertos en agenda durante 5 días
+consecutivos.** Un número, no una sensación.
+
+Los ✓/✗ se convierten en el corpus de pruebas de regresión: las dos semanas de
+sombra producen el dataset.
+
+## 13. Módulo financiero
+
+Extrae de correos bancarios y de pagos: monto, moneda, fecha, contraparte,
+concepto. Categoriza. Convierte a COP con la **TRM del día de la transacción**
+(fuente pública consultada a diario y cacheada por fecha; si no responde, se usa
+la última conocida y se marca el movimiento como TRM aproximada). *El endpoint
+concreto de TRM se verifica el primer día.*
+
+Detecta facturas con fecha límite → `cuentas_por_pagar` → alerta antes del
+vencimiento. Señala cobros duplicados y cargos atípicos.
+
+**La asistente nunca mueve dinero. Sólo lee y registra.** Riesgo cero por
+diseño.
+
+### Deduplicación
+
+`hash_dedup = hash(fecha + monto + moneda + contraparte normalizada)` con
+constraint UNIQUE.
+
+El banco reenvía el mismo aviso, Marcelo lo reenvía, o la recuperación tras un
+apagón reprocesa un rango. Sin ese hash el libro cuenta dos veces el mismo
+ingreso y **queda mintiendo en silencio**, que es la peor forma de fallar en
+contabilidad.
+
+## 14. Panel web
+
+**Next.js en Vercel, PWA instalable, mobile-first.**
+
+```
+📱 Vercel (Next.js)
+      │  route handlers = BFF — el token de servicio nunca llega al navegador
+      ▼
+🔒 Cloudflare Tunnel   ← el mismo que ya se necesita para el push de Gmail
+      ▼
+💻 Laptop de Marcelo: API Fastify + Postgres
+```
+
+**Autenticación: código de un solo uso enviado por el bot de Telegram.** Sin
+contraseñas, sin OAuth, sin tabla de usuarios. Está autenticado por poseer el
+teléfono. Sesión en cookie `httpOnly` firmada. El panel muestra movimientos
+bancarios: una URL secreta no es autenticación.
+
+**Pantallas:**
+
+| Pantalla | Contenido |
+|---|---|
+| Hoy | lo que hizo hoy · próximos eventos · alertas |
+| Finanzas | balance del mes · gráfica · movimientos · cuentas por pagar |
+| Agenda | compromisos enseñados · semana |
+| **Actividad** | log de auditoría: cada acción autónoma con su correo origen, confianza y botón deshacer |
+
+La pantalla de Actividad es la que convierte "me da miedo darle permisos" en
+"ya veo qué hizo". Es la contraparte visible de la autonomía.
+
+Con el backend caído, el panel muestra **"asistente sin conexión desde las
+14:20"**, no un spinner eterno.
+
+## 15. Despliegue
+
+Docker Compose en la laptop dedicada de Marcelo (siempre encendida, sin uso
+personal).
+
+| Riesgo | Mitigación |
+|---|---|
+| Sin IP pública para el push de Gmail | Cloudflare Tunnel (sólo salida, HTTPS real, sin abrir puertos) |
+| Administración sin depender de Marcelo | Tailscale como servicio → SSH/RDP desde cualquier parte |
+| Reinicios por Windows Update | `restart: unless-stopped` + arranque automático |
+| Caída de internet doméstico | recuperación por `historyId` al reconectar |
+| Muerte de la laptop | `pg_dump` cifrado cada noche fuera del equipo |
+| Batería enchufada 24/7 durante años | limitar carga al 60–80 % si el fabricante lo permite |
+| Servicio muerto sin que nadie lo note | **watchdog**: latido cada 5 min; si falta, alerta a Jose por Telegram |
+
+Como todo va en Compose con respaldo nocturno, **el host no es una apuesta
+permanente**: si la laptop muere, el mismo compose levanta en un VPS en minutos.
+
+## 16. Manejo de fallos
+
+| Fallo | Manejo |
+|---|---|
+| El `watch` de Gmail expira a los 7 días | cron diario de renovación |
+| `historyId` caducado (apagón > 7 días) | resync completo de las últimas 72 h |
+| Pub/Sub reintenta el mismo mensaje | idempotencia por `message_id` |
+| El LLM devuelve JSON inválido | 3 reintentos con backoff → cola de muertos + alerta |
+| El LLM inventa un id fuera de los candidatos | se descarta → pregunta |
+| Google API 429/403 | backoff exponencial |
+| Groq sin cuota | cambio de proveedor por configuración; si no, se encola |
+| Laptop apagada | recuperación al arrancar |
+| Acción equivocada aplicada | deshacer con la inversa |
+
+**Ningún correo se pierde:** la cola vive en Postgres, no en memoria. Si el
+proceso muere a media tanda, al reiniciar retoma donde iba.
+
+## 17. Estrategia de pruebas
+
+Toda la suite corre con puertos falsos y reloj congelado: sin red, en segundos.
+
+| Nivel | Qué verifica |
+|---|---|
+| Extracción | correo → hechos esperados |
+| Resolución | los casos tramposos (abajo) |
+| Política | la tabla de decisión completa |
+| Deshacer | aplicar → revertir → estado idéntico al original |
+| Deduplicación | el mismo correo 3 veces → 1 movimiento |
+| Recuperación | apagón simulado → no se pierde ni se duplica nada |
+
+**Casos tramposos obligatorios:**
+
+- *"la clase de la próxima semana se cancela"* enviado un martes
+- *"se cancela la de mañana"* llegando a las 11 pm
+- dos clases el mismo día con el mismo profesor
+- correo reenviado por Marcelo (no debe contar doble)
+- correo que menciona dinero pero no es una transacción
+
+Prueba de aceptación en producción: **el modo sombra**.
+
+## 18. Fuera de alcance (fase 1)
+
+- Que la asistente responda con voz (fácil de agregar después)
+- Multi-usuario / multi-tenant
+- Mover dinero, pagar facturas, cualquier acción financiera de escritura
+- Integración con WhatsApp
+- Modelos locales
+
+## 19. Riesgos abiertos
+
+1. **La transcripción del audio original tiene tramos confusos en la zona
+   financiera.** La interpretación (correos bancarios y de pagos → libro) se
+   validó con el desarrollador, no con el cliente. Conviene confirmarla con
+   Marcelo antes de cerrar el módulo financiero.
+2. **Identificadores de modelo de Groq**: verificar el catálogo vigente el primer
+   día en vez de asumirlos.
+3. **Endpoint de TRM**: verificar la fuente pública antes de implementarla.
+4. **Cuotas del free tier de Groq**: el volumen estimado (~30 llamadas diarias
+   tras el prefiltro) cabe con holgura, pero conviene medirlo en la primera
+   semana.
