@@ -1,0 +1,1444 @@
+<title>Mi Segundo Cerebro</title>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   MI SEGUNDO CEREBRO
+   Dos fuentes de luz: brasa = ella actuó · luna = pendiente.
+   La temperatura del color es información, no adorno.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  --vacio:      #0A0806;
+  --ceniza:     #14100C;
+  --ceniza-alt: #1B1611;
+  --hierro:     #2B2420;
+  --hierro-alt: #3A3029;
+
+  --brasa:      #D98E33;
+  --brasa-alta: #F7CE86;
+  --brasa-hum:  rgba(217, 142, 51, 0.12);
+
+  --luna:       #8DA3B5;
+  --luna-hum:   rgba(141, 163, 181, 0.10);
+
+  --hueso:      #DCD5C7;
+  --hueso-tenue:#8B8377;
+  --sangre:     #9A3226;
+
+  --display: 'Palatino Linotype', 'Book Antiqua', Palatino,
+             'Iowan Old Style', 'Hoefler Text', Georgia, serif;
+  --cuerpo:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --dato:    ui-monospace, 'Cascadia Mono', 'SF Mono', Consolas, monospace;
+
+  --marco: 1.375rem;
+  --pausa: 0.875rem;
+}
+
+/* Mundo único y deliberado: un grimorio no tiene modo claro.
+   Se fijan los tokens para que el conmutador de tema no lo rompa. */
+:root[data-theme="light"], :root[data-theme="dark"] { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--vacio);
+  color: var(--hueso);
+  font-family: var(--cuerpo);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Grano: hace que se sienta materia, no pantalla. Apenas perceptible. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Viñeta: la luz cae al centro */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 99;
+  background: radial-gradient(ellipse 80% 60% at 50% 40%,
+              transparent 30%, rgba(0,0,0,0.55) 100%);
+}
+
+.marco {
+  max-width: 460px;
+  margin: 0 auto;
+  min-height: 100vh;
+  position: relative;
+  padding-bottom: 7.5rem;
+  background: linear-gradient(180deg, #0D0A08 0%, var(--vacio) 40%);
+}
+
+/* ── Cabecera ─────────────────────────────────────────────── */
+
+.cabecera {
+  padding: 1.75rem var(--marco) 1.125rem;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: linear-gradient(180deg, #0D0A08 70%, rgba(13,10,8,0));
+  backdrop-filter: blur(6px);
+}
+
+.cabecera-fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.marca {
+  font-family: var(--display);
+  font-size: 0.6875rem;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--brasa);
+  margin: 0;
+  font-weight: 400;
+}
+
+.marca span { color: var(--hueso-tenue); }
+
+.estado {
+  font-family: var(--dato);
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  color: var(--luna);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  white-space: nowrap;
+}
+
+.pulso {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--luna);
+  box-shadow: 0 0 6px var(--luna);
+  animation: latir 3.2s ease-in-out infinite;
+}
+
+@keyframes latir { 0%,100% { opacity: 1 } 50% { opacity: 0.25 } }
+
+.fecha {
+  font-family: var(--display);
+  font-size: 1.875rem;
+  line-height: 1.1;
+  margin: 0.625rem 0 0;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.fecha em {
+  font-style: normal;
+  color: var(--hueso-tenue);
+}
+
+/* ── Navegación ───────────────────────────────────────────── */
+
+.nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 460px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: linear-gradient(180deg, rgba(10,8,6,0.4), #0B0907 45%);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--hierro);
+  z-index: 40;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.nav-btn {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-top: 1px solid transparent;
+  margin-top: -1px;
+  padding: 0.9375rem 0.25rem 1.0625rem;
+  font-family: var(--display);
+  font-size: 0.625rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--hueso-tenue);
+  cursor: pointer;
+  transition: color 0.25s, border-color 0.25s;
+}
+
+.nav-btn[aria-selected="true"] {
+  color: var(--brasa-alta);
+  border-top-color: var(--brasa);
+}
+
+.nav-btn:focus-visible {
+  outline: 1px solid var(--brasa);
+  outline-offset: -3px;
+}
+
+/* ── Secciones ────────────────────────────────────────────── */
+
+.vista { display: none; padding: 0 var(--marco); }
+.vista.activa { display: block; animation: emerger 0.45s ease-out both; }
+
+@keyframes emerger {
+  from { opacity: 0; transform: translateY(10px) }
+  to   { opacity: 1; transform: none }
+}
+
+.rotulo {
+  font-family: var(--display);
+  font-size: 0.625rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--hueso-tenue);
+  margin: 2rem 0 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.rotulo::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--hierro), transparent);
+}
+
+.rotulo:first-child { margin-top: 0.5rem; }
+
+/* ── Lo que se acerca ─────────────────────────────────────── */
+
+.acecho {
+  display: flex;
+  gap: 0.625rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 0.25rem;
+  margin: 0 calc(var(--marco) * -1);
+  padding-left: var(--marco);
+  padding-right: var(--marco);
+}
+.acecho::-webkit-scrollbar { display: none; }
+
+.amenaza {
+  flex: 0 0 auto;
+  min-width: 8.75rem;
+  padding: 0.75rem 0.875rem 0.8125rem;
+  background: var(--ceniza);
+  border: 1px solid var(--hierro);
+  border-left: 2px solid var(--luna);
+}
+
+.amenaza.cerca { border-left-color: var(--brasa); }
+.amenaza.urgente { border-left-color: var(--sangre); }
+
+.cuenta {
+  font-family: var(--dato);
+  font-size: 1.375rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--luna);
+  line-height: 1;
+}
+
+.amenaza.cerca .cuenta { color: var(--brasa-alta); }
+.amenaza.urgente .cuenta { color: #C4574A; }
+
+.cuenta small {
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  color: var(--hueso-tenue);
+  margin-left: 0.25rem;
+}
+
+.amenaza-qué {
+  font-size: 0.8125rem;
+  margin-top: 0.375rem;
+  line-height: 1.3;
+}
+
+.amenaza-tipo {
+  font-family: var(--display);
+  font-size: 0.5625rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hueso-tenue);
+  margin-top: 0.25rem;
+}
+
+/* ── Jornada: la columna del día ──────────────────────────── */
+
+.jornada { position: relative; margin-top: 0.25rem; }
+
+.bloque {
+  display: grid;
+  grid-template-columns: 3.25rem 1fr;
+  gap: 0.875rem;
+  position: relative;
+  padding-bottom: 1.125rem;
+}
+
+.hora {
+  font-family: var(--dato);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--hueso-tenue);
+  padding-top: 0.8125rem;
+  text-align: right;
+}
+
+/* La espina del día */
+.bloque::before {
+  content: '';
+  position: absolute;
+  left: 3.6875rem;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--hierro);
+}
+
+.bloque:last-child::before { bottom: 50%; }
+
+.placa {
+  background: var(--ceniza);
+  border: 1px solid var(--hierro);
+  padding: 0.75rem 0.875rem 0.8125rem;
+  position: relative;
+  transition: border-color 0.25s, background 0.25s;
+}
+
+.placa::before {
+  content: '';
+  position: absolute;
+  left: -0.9375rem;
+  top: 1.125rem;
+  width: 0.5rem;
+  height: 1px;
+  background: var(--hierro);
+}
+
+.placa-titulo {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+}
+
+.placa-meta {
+  font-family: var(--dato);
+  font-size: 0.6875rem;
+  color: var(--hueso-tenue);
+  margin-top: 0.1875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Lo pendiente: luz fría */
+.placa.pendiente { border-left: 2px solid var(--luna); }
+
+/* Lo que ya pasó: ceniza */
+.placa.pasado { opacity: 0.42; }
+
+/* Lo que ELLA tocó: brasa. Su presencia es luz. */
+.placa.tocado {
+  border-left: 2px solid var(--brasa);
+  background: linear-gradient(90deg, var(--brasa-hum), var(--ceniza) 55%);
+}
+
+.placa.tocado .placa-titulo {
+  text-decoration: line-through;
+  text-decoration-color: var(--brasa);
+  text-decoration-thickness: 1px;
+  color: var(--hueso-tenue);
+}
+
+.huella {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--hierro);
+  font-size: 0.6875rem;
+  color: var(--brasa);
+}
+
+.huella-icono {
+  width: 4px; height: 4px;
+  background: var(--brasa);
+  box-shadow: 0 0 5px var(--brasa);
+  flex: 0 0 auto;
+}
+
+/* ── EL HILO DE BRASA: la firma ───────────────────────────── */
+
+.hilo {
+  position: relative;
+  height: 1.75rem;
+  margin: 0.125rem 0 1.125rem;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.hilo-linea {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent, var(--brasa) 12%, var(--brasa-alta) 45%, var(--brasa) 78%, transparent);
+  box-shadow: 0 0 12px 1px rgba(217,142,51,0.45);
+  transform-origin: left center;
+  animation: tender 1.1s cubic-bezier(.22,.9,.3,1) 0.25s both;
+}
+
+@keyframes tender { from { transform: scaleX(0); opacity: 0 } to { transform: scaleX(1); opacity: 1 } }
+
+.hilo-ahora {
+  position: relative;
+  font-family: var(--dato);
+  font-size: 0.625rem;
+  letter-spacing: 0.16em;
+  color: var(--brasa-alta);
+  background: var(--vacio);
+  padding: 0 0.5rem 0 0;
+  margin-left: 3.25rem;
+  text-transform: uppercase;
+}
+
+/* ── Crónica ──────────────────────────────────────────────── */
+
+.entrada {
+  border-bottom: 1px solid var(--hierro);
+  padding: 1rem 0 1.0625rem;
+}
+
+.entrada:first-of-type { border-top: 1px solid var(--hierro); }
+
+.entrada-cabeza {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.sello {
+  font-family: var(--display);
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--brasa);
+  flex: 0 0 1.5rem;
+  padding-top: 0.0625rem;
+}
+
+.entrada-cuerpo { flex: 1; min-width: 0; }
+
+.entrada-hecho {
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.entrada-hecho b { font-weight: 500; }
+
+.entrada-fuente {
+  font-family: var(--dato);
+  font-size: 0.6875rem;
+  color: var(--hueso-tenue);
+  margin-top: 0.3125rem;
+}
+
+.entrada-pie {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-top: 0.6875rem;
+  flex-wrap: wrap;
+}
+
+.certeza {
+  font-family: var(--display);
+  font-size: 0.5625rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 0.1875rem 0.4375rem;
+  border: 1px solid var(--hierro-alt);
+  color: var(--hueso-tenue);
+}
+
+.certeza.alta { color: var(--brasa); border-color: rgba(217,142,51,0.35); }
+.certeza.media { color: var(--luna); border-color: rgba(141,163,181,0.3); }
+
+.deshacer {
+  appearance: none;
+  background: none;
+  border: 1px solid var(--hierro-alt);
+  color: var(--hueso);
+  font-family: var(--cuerpo);
+  font-size: 0.75rem;
+  padding: 0.3125rem 0.6875rem;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.deshacer:hover, .deshacer:focus-visible {
+  border-color: var(--brasa);
+  color: var(--brasa-alta);
+  background: var(--brasa-hum);
+  outline: none;
+}
+
+.deshacer[disabled] {
+  opacity: 0.4;
+  cursor: default;
+  border-style: dashed;
+}
+
+.ver-correo {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--luna);
+  font-family: var(--cuerpo);
+  font-size: 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(141,163,181,0.3);
+}
+
+.ver-correo:hover, .ver-correo:focus-visible { color: var(--hueso); outline: none; }
+
+.correo-fuente {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  background: var(--ceniza-alt);
+  border-left: 2px solid var(--hierro-alt);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--hueso-tenue);
+  display: none;
+}
+
+.correo-fuente.abierto { display: block; animation: emerger 0.3s ease-out both; }
+
+.correo-de {
+  font-family: var(--dato);
+  font-size: 0.6875rem;
+  color: var(--luna);
+  margin-bottom: 0.375rem;
+}
+
+/* ── Tesoro ───────────────────────────────────────────────── */
+
+.balance {
+  border: 1px solid var(--hierro);
+  background: linear-gradient(160deg, var(--ceniza-alt), var(--ceniza));
+  padding: 1.25rem var(--pausa) 1.125rem;
+}
+
+.balance-cifra {
+  font-family: var(--dato);
+  font-size: 2.375rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--brasa-alta);
+}
+
+.balance-cifra small { font-size: 1.125rem; color: var(--hueso-tenue); }
+
+.balance-rotulo {
+  font-family: var(--display);
+  font-size: 0.625rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--hueso-tenue);
+  margin-bottom: 0.5rem;
+}
+
+.flujo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--hierro);
+  border: 1px solid var(--hierro);
+  border-top: 0;
+}
+
+.flujo div {
+  background: var(--ceniza);
+  padding: 0.75rem var(--pausa) 0.8125rem;
+}
+
+.flujo-cifra {
+  font-family: var(--dato);
+  font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.entra .flujo-cifra { color: var(--brasa); }
+.sale  .flujo-cifra { color: var(--luna); }
+
+.flujo-rotulo {
+  font-size: 0.6875rem;
+  color: var(--hueso-tenue);
+  margin-top: 0.125rem;
+}
+
+.movimiento {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.875rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--hierro);
+}
+
+.mov-que { font-size: 0.875rem; }
+
+.mov-cuando {
+  font-family: var(--dato);
+  font-size: 0.6875rem;
+  color: var(--hueso-tenue);
+  margin-top: 0.125rem;
+}
+
+.mov-monto {
+  font-family: var(--dato);
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mov-monto.mas { color: var(--brasa); }
+.mov-monto.menos { color: var(--hueso-tenue); }
+
+.conversion {
+  font-family: var(--dato);
+  font-size: 0.625rem;
+  color: var(--luna);
+  margin-top: 0.1875rem;
+}
+
+.deuda {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.875rem;
+  padding: 0.875rem var(--pausa);
+  background: var(--ceniza);
+  border: 1px solid var(--hierro);
+  border-left: 2px solid var(--sangre);
+  margin-bottom: 0.5rem;
+}
+
+.deuda-plazo {
+  font-family: var(--dato);
+  font-size: 0.6875rem;
+  color: #C4574A;
+  margin-top: 0.1875rem;
+}
+
+/* ── Pactos ───────────────────────────────────────────────── */
+
+.pacto {
+  padding: 0.9375rem 0 1rem;
+  border-bottom: 1px solid var(--hierro);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.875rem;
+}
+
+.pacto:first-of-type { border-top: 1px solid var(--hierro); }
+
+.pacto-cuando {
+  font-family: var(--dato);
+  font-size: 0.6875rem;
+  color: var(--luna);
+  margin-top: 0.25rem;
+}
+
+.pacto-vinculo {
+  font-size: 0.6875rem;
+  color: var(--hueso-tenue);
+  margin-top: 0.25rem;
+}
+
+.racha {
+  font-family: var(--dato);
+  font-size: 1.125rem;
+  color: var(--brasa-alta);
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.racha small {
+  display: block;
+  font-family: var(--display);
+  font-size: 0.5rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hueso-tenue);
+}
+
+/* ── Invocar ──────────────────────────────────────────────── */
+
+.orbe {
+  position: fixed;
+  bottom: 4.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  border: 1px solid rgba(217,142,51,0.5);
+  background: radial-gradient(circle at 50% 45%,
+              rgba(247,206,134,0.35), rgba(217,142,51,0.12) 55%, rgba(20,16,12,0.9));
+  box-shadow: 0 0 22px rgba(217,142,51,0.28), inset 0 0 14px rgba(217,142,51,0.18);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  animation: respirar 4.5s ease-in-out infinite;
+  transition: transform 0.2s;
+}
+
+@keyframes respirar {
+  0%,100% { box-shadow: 0 0 20px rgba(217,142,51,0.22), inset 0 0 12px rgba(217,142,51,0.15) }
+  50%     { box-shadow: 0 0 34px rgba(217,142,51,0.42), inset 0 0 18px rgba(217,142,51,0.28) }
+}
+
+.orbe:active { transform: translateX(-50%) scale(0.94); }
+.orbe:focus-visible { outline: 2px solid var(--brasa-alta); outline-offset: 4px; }
+
+.orbe-nucleo {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  background: var(--brasa-alta);
+  box-shadow: 0 0 10px var(--brasa-alta);
+}
+
+/* Panel de invocación */
+.invocacion {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(6,5,4,0.86);
+  backdrop-filter: blur(10px);
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.invocacion.abierta { display: flex; animation: emerger 0.28s ease-out both; }
+
+.invocacion-caja {
+  width: 100%;
+  max-width: 460px;
+  background: linear-gradient(180deg, var(--ceniza-alt), var(--vacio));
+  border-top: 1px solid var(--brasa);
+  box-shadow: 0 -14px 40px rgba(0,0,0,0.7), 0 -1px 22px rgba(217,142,51,0.18);
+  padding: 1.25rem var(--marco) calc(1.5rem + env(safe-area-inset-bottom));
+}
+
+.invocacion-titulo {
+  font-family: var(--display);
+  font-size: 0.625rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--brasa);
+  margin-bottom: 0.9375rem;
+}
+
+.onda {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 3rem;
+  margin-bottom: 1rem;
+}
+
+.onda i {
+  width: 3px;
+  background: var(--brasa);
+  border-radius: 1px;
+  height: 15%;
+  opacity: 0.35;
+  transition: height 0.09s linear, opacity 0.09s linear;
+}
+
+.transcrito {
+  min-height: 3.25rem;
+  padding: 0.8125rem 0.875rem;
+  background: var(--ceniza);
+  border: 1px solid var(--hierro);
+  border-left: 2px solid var(--luna);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  margin-bottom: 0.875rem;
+  color: var(--hueso-tenue);
+}
+
+.transcrito.listo { color: var(--hueso); border-left-color: var(--brasa); }
+
+.transcrito-nota {
+  font-family: var(--dato);
+  font-size: 0.625rem;
+  color: var(--luna);
+  margin-top: 0.4375rem;
+}
+
+.decir {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.decir input {
+  flex: 1;
+  min-width: 0;
+  background: var(--ceniza);
+  border: 1px solid var(--hierro-alt);
+  color: var(--hueso);
+  font-family: var(--cuerpo);
+  font-size: 0.9375rem;
+  padding: 0.6875rem 0.8125rem;
+}
+
+.decir input::placeholder { color: var(--hueso-tenue); }
+.decir input:focus { outline: none; border-color: var(--brasa); }
+
+.boton {
+  appearance: none;
+  cursor: pointer;
+  font-family: var(--display);
+  font-size: 0.625rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 0.6875rem 0.9375rem;
+  background: var(--brasa-hum);
+  border: 1px solid var(--brasa);
+  color: var(--brasa-alta);
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.boton:hover, .boton:focus-visible { background: rgba(217,142,51,0.22); outline: none; }
+
+.boton.fantasma {
+  background: none;
+  border-color: var(--hierro-alt);
+  color: var(--hueso-tenue);
+}
+
+.boton.fantasma:hover, .boton.fantasma:focus-visible {
+  border-color: var(--hueso-tenue);
+  color: var(--hueso);
+  background: none;
+}
+
+.invocacion-acciones {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.875rem;
+}
+
+.invocacion-acciones .boton { flex: 1; text-align: center; }
+
+.sugerencias {
+  display: flex;
+  gap: 0.4375rem;
+  flex-wrap: wrap;
+  margin-top: 0.875rem;
+}
+
+.sugerencia {
+  appearance: none;
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--hierro-alt);
+  color: var(--hueso-tenue);
+  font-family: var(--cuerpo);
+  font-size: 0.75rem;
+  padding: 0.3125rem 0.625rem;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.sugerencia:hover, .sugerencia:focus-visible {
+  border-color: var(--luna);
+  color: var(--hueso);
+  outline: none;
+}
+
+/* ── Estados vacíos y aviso ───────────────────────────────── */
+
+.vacio-msg {
+  font-family: var(--display);
+  font-size: 1.0625rem;
+  color: var(--hueso-tenue);
+  text-align: center;
+  padding: 2.5rem 1rem;
+  line-height: 1.5;
+}
+
+.aviso {
+  position: fixed;
+  bottom: 9.5rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(0.75rem);
+  z-index: 70;
+  background: var(--ceniza-alt);
+  border: 1px solid var(--brasa);
+  border-left-width: 2px;
+  padding: 0.6875rem 0.9375rem;
+  font-size: 0.8125rem;
+  max-width: calc(100% - 2.5rem);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+}
+
+.aviso.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.pie-nota {
+  font-size: 0.75rem;
+  color: var(--hueso-tenue);
+  line-height: 1.55;
+  padding: 1.5rem 0 0.5rem;
+  border-top: 1px solid var(--hierro);
+  margin-top: 1.75rem;
+}
+
+.sello-prototipo {
+  font-family: var(--display);
+  font-size: 0.5625rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #4A423A;
+  text-align: center;
+  padding: 2rem var(--marco) 0;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+</style>
+
+<div class="marco">
+
+  <header class="cabecera">
+    <div class="cabecera-fila">
+      <h1 class="marca">Mi Segundo <span>Cerebro</span></h1>
+      <div class="estado"><span class="pulso"></span>Despierta</div>
+    </div>
+    <p class="fecha">Jueves 30<em> de julio</em></p>
+  </header>
+
+  <!-- ═══ JORNADA ═══ -->
+  <section class="vista activa" id="v-jornada" role="tabpanel" aria-labelledby="t-jornada">
+
+    <p class="rotulo">Lo que se acerca</p>
+    <div class="acecho">
+      <article class="amenaza urgente">
+        <p class="cuenta">2<small>DÍAS</small></p>
+        <p class="amenaza-qué">Arriendo · $1.800.000</p>
+        <p class="amenaza-tipo">Pago</p>
+      </article>
+      <article class="amenaza cerca">
+        <p class="cuenta">5<small>DÍAS</small></p>
+        <p class="amenaza-qué">Parcial de Cálculo</p>
+        <p class="amenaza-tipo">Examen</p>
+      </article>
+      <article class="amenaza">
+        <p class="cuenta">12<small>DÍAS</small></p>
+        <p class="amenaza-qué">Proyecto de Bases de Datos</p>
+        <p class="amenaza-tipo">Entrega</p>
+      </article>
+    </div>
+
+    <p class="rotulo">Jornada</p>
+    <div class="jornada">
+
+      <div class="bloque">
+        <p class="hora">07:00</p>
+        <div class="placa pasado">
+          <p class="placa-titulo">Gimnasio</p>
+          <p class="placa-meta">07:00 – 08:15 · racha de 12 días</p>
+        </div>
+      </div>
+
+      <div class="bloque">
+        <p class="hora">09:00</p>
+        <div class="placa pasado">
+          <p class="placa-titulo">Bases de Datos</p>
+          <p class="placa-meta">09:00 – 11:00 · Sala 204</p>
+        </div>
+      </div>
+
+      <div class="bloque">
+        <p class="hora">11:30</p>
+        <div class="placa pasado">
+          <p class="placa-titulo">Entrega: taller de Álgebra</p>
+          <p class="placa-meta">Enviado 11:12 · a tiempo</p>
+        </div>
+      </div>
+
+      <!-- LA FIRMA: el hilo de brasa marca el ahora -->
+      <div class="hilo" aria-hidden="true">
+        <span class="hilo-linea"></span>
+        <span class="hilo-ahora">Ahora · 14:20</span>
+      </div>
+
+      <div class="bloque">
+        <p class="hora">16:00</p>
+        <div class="placa tocado">
+          <p class="placa-titulo">Cálculo</p>
+          <p class="placa-meta">16:00 – 17:00 · prof. Ramírez</p>
+          <p class="huella">
+            <span class="huella-icono"></span>
+            La cancelé a las 8:42 am
+          </p>
+        </div>
+      </div>
+
+      <div class="bloque">
+        <p class="hora">16:00</p>
+        <div class="placa pendiente">
+          <p class="placa-titulo">Grupo de estudio</p>
+          <p class="placa-meta">16:00 – 18:00 · con Andrés y Sara</p>
+          <p class="huella">
+            <span class="huella-icono"></span>
+            Lo moví de las 15:00 porque se te liberó la tarde
+          </p>
+        </div>
+      </div>
+
+      <div class="bloque">
+        <p class="hora">20:00</p>
+        <div class="placa pendiente">
+          <p class="placa-titulo">Estudiar para el parcial</p>
+          <p class="placa-meta">20:00 – 22:00 · lo bloqueaste tú</p>
+        </div>
+      </div>
+
+    </div>
+
+    <p class="pie-nota">
+      Dos horas libres esta tarde que antes no tenías. El parcial es en cinco días.
+    </p>
+  </section>
+
+  <!-- ═══ CRÓNICA ═══ -->
+  <section class="vista" id="v-cronica" role="tabpanel" aria-labelledby="t-cronica">
+    <p class="rotulo">Hoy</p>
+
+    <article class="entrada">
+      <div class="entrada-cabeza">
+        <p class="sello">✦</p>
+        <div class="entrada-cuerpo">
+          <p class="entrada-hecho">Cancelé <b>«Cálculo»</b> de hoy a las 16:00.</p>
+          <p class="entrada-fuente">8:42 am · correo de prof. Ramírez</p>
+          <div class="entrada-pie">
+            <span class="certeza alta">Certeza alta</span>
+            <button class="ver-correo" type="button" data-abre="c1">Ver el correo</button>
+            <button class="deshacer" type="button">Deshacer</button>
+          </div>
+          <div class="correo-fuente" id="c1">
+            <p class="correo-de">De: ramirez@uni.edu.co — «Clase de hoy»</p>
+            Buenas tardes. Por motivos de salud no podré dictar la clase de hoy.
+            Nos vemos el próximo miércoles a la hora habitual.
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="entrada">
+      <div class="entrada-cabeza">
+        <p class="sello">✦</p>
+        <div class="entrada-cuerpo">
+          <p class="entrada-hecho">Moví <b>«Grupo de estudio»</b> de las 15:00 a las 16:00.</p>
+          <p class="entrada-fuente">8:43 am · después de cancelar Cálculo</p>
+          <div class="entrada-pie">
+            <span class="certeza media">Certeza media</span>
+            <button class="deshacer" type="button">Deshacer</button>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="entrada">
+      <div class="entrada-cabeza">
+        <p class="sello">✦</p>
+        <div class="entrada-cuerpo">
+          <p class="entrada-hecho">Registré <b>3 movimientos</b> en el tesoro.</p>
+          <p class="entrada-fuente">11:05 am · correos de Bancolombia y Nequi</p>
+          <div class="entrada-pie">
+            <span class="certeza alta">Certeza alta</span>
+            <button class="ver-correo" type="button" data-abre="c3">Ver el detalle</button>
+          </div>
+          <div class="correo-fuente" id="c3">
+            <p class="correo-de">Nequi · Bancolombia</p>
+            Transferencia recibida +$1.240.000 · Mercado −$89.900 · Transporte −$45.000
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <p class="rotulo">Ayer</p>
+
+    <article class="entrada">
+      <div class="entrada-cabeza">
+        <p class="sello">✦</p>
+        <div class="entrada-cuerpo">
+          <p class="entrada-hecho">Te avisé del <b>parcial de Cálculo</b> con seis días.</p>
+          <p class="entrada-fuente">7:15 pm · correo de la facultad</p>
+          <div class="entrada-pie">
+            <span class="certeza alta">Certeza alta</span>
+            <button class="deshacer" type="button" disabled>Deshacer</button>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <p class="pie-nota">
+      Todo lo que hace queda aquí, con el correo que lo causó y qué tan segura estaba.
+      Nada se borra: deshacer agrega una línea, no quita esta.
+    </p>
+  </section>
+
+  <!-- ═══ TESORO ═══ -->
+  <section class="vista" id="v-tesoro" role="tabpanel" aria-labelledby="t-tesoro">
+    <p class="rotulo">Julio</p>
+
+    <div class="balance">
+      <p class="balance-rotulo">Te queda</p>
+      <p class="balance-cifra">$505.100</p>
+    </div>
+    <div class="flujo">
+      <div class="entra">
+        <p class="flujo-cifra">+$1.240.000</p>
+        <p class="flujo-rotulo">Entró</p>
+      </div>
+      <div class="sale">
+        <p class="flujo-cifra">−$734.900</p>
+        <p class="flujo-rotulo">Salió</p>
+      </div>
+    </div>
+
+    <p class="rotulo">Por pagar</p>
+    <div class="deuda">
+      <div>
+        <p class="mov-que">Arriendo</p>
+        <p class="deuda-plazo">Vence el sábado · en 2 días</p>
+      </div>
+      <p class="mov-monto">$1.800.000</p>
+    </div>
+
+    <p class="rotulo">Movimientos</p>
+
+    <div class="movimiento">
+      <div>
+        <p class="mov-que">Transferencia recibida</p>
+        <p class="mov-cuando">Hoy 11:05 · Nequi</p>
+      </div>
+      <p class="mov-monto mas">+$1.240.000</p>
+    </div>
+
+    <div class="movimiento">
+      <div>
+        <p class="mov-que">Mercado</p>
+        <p class="mov-cuando">Hoy 10:41 · Éxito</p>
+      </div>
+      <p class="mov-monto menos">−$89.900</p>
+    </div>
+
+    <div class="movimiento">
+      <div>
+        <p class="mov-que">Transporte</p>
+        <p class="mov-cuando">Hoy 08:20 · recarga Civica</p>
+      </div>
+      <p class="mov-monto menos">−$45.000</p>
+    </div>
+
+    <div class="movimiento">
+      <div>
+        <p class="mov-que">Suscripción</p>
+        <p class="mov-cuando">Martes 28 · Spotify</p>
+      </div>
+      <p class="mov-monto menos">−$16.900</p>
+    </div>
+
+    <p class="pie-nota">
+      Solo lee y anota. Nunca mueve tu plata ni paga nada por su cuenta.
+    </p>
+  </section>
+
+  <!-- ═══ PACTOS ═══ -->
+  <section class="vista" id="v-pactos" role="tabpanel" aria-labelledby="t-pactos">
+    <p class="rotulo">Lo que le enseñaste</p>
+
+    <div class="pacto">
+      <div>
+        <p class="mov-que">Cálculo</p>
+        <p class="pacto-cuando">Miércoles · 16:00 – 17:00</p>
+        <p class="pacto-vinculo">Escucha a ramirez@uni.edu.co</p>
+      </div>
+    </div>
+
+    <div class="pacto">
+      <div>
+        <p class="mov-que">Bases de Datos</p>
+        <p class="pacto-cuando">Jueves · 09:00 – 11:00</p>
+        <p class="pacto-vinculo">Escucha a coordinacion@uni.edu.co</p>
+      </div>
+    </div>
+
+    <div class="pacto">
+      <div>
+        <p class="mov-que">Gimnasio</p>
+        <p class="pacto-cuando">Lunes, miércoles y viernes · 07:00</p>
+        <p class="pacto-vinculo">Sin correo vinculado</p>
+      </div>
+      <p class="racha">12<small>días</small></p>
+    </div>
+
+    <div class="pacto">
+      <div>
+        <p class="mov-que">Grupo de estudio</p>
+        <p class="pacto-cuando">Jueves · 15:00 – 17:00</p>
+        <p class="pacto-vinculo">Escucha a andres.m@uni.edu.co</p>
+      </div>
+    </div>
+
+    <p class="pie-nota">
+      Dile uno nuevo hablando: «los martes tengo laboratorio de 10 a 12 con la profe Cardona».
+    </p>
+  </section>
+
+  <p class="sello-prototipo">Prototipo de interfaz · los datos son de ejemplo</p>
+
+  <nav class="nav" role="tablist" aria-label="Secciones">
+    <button class="nav-btn" id="t-jornada" role="tab" aria-selected="true"  aria-controls="v-jornada" data-va="jornada">Jornada</button>
+    <button class="nav-btn" id="t-cronica" role="tab" aria-selected="false" aria-controls="v-cronica" data-va="cronica">Crónica</button>
+    <button class="nav-btn" id="t-tesoro"  role="tab" aria-selected="false" aria-controls="v-tesoro"  data-va="tesoro">Tesoro</button>
+    <button class="nav-btn" id="t-pactos"  role="tab" aria-selected="false" aria-controls="v-pactos"  data-va="pactos">Pactos</button>
+  </nav>
+
+  <button class="orbe" id="orbe" type="button" aria-label="Hablarle a tu segundo cerebro">
+    <span class="orbe-nucleo"></span>
+  </button>
+
+  <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
+</div>
+
+<!-- ═══ INVOCAR ═══ -->
+<div class="invocacion" id="invocacion" role="dialog" aria-modal="true" aria-label="Hablarle">
+  <div class="invocacion-caja">
+    <p class="invocacion-titulo" id="inv-titulo">Dile qué necesitas</p>
+
+    <div class="onda" id="onda" hidden></div>
+
+    <div class="transcrito" id="transcrito" hidden></div>
+
+    <div class="decir">
+      <input id="texto" type="text" placeholder="Escríbele…"
+             autocomplete="off" aria-label="Mensaje para tu segundo cerebro">
+      <button class="boton" id="enviar" type="button">Enviar</button>
+    </div>
+
+    <div class="sugerencias" id="sugerencias">
+      <button class="sugerencia" type="button">¿Qué me queda hoy?</button>
+      <button class="sugerencia" type="button">¿Cuánto me entró este mes?</button>
+      <button class="sugerencia" type="button">Bloquéame el sábado para estudiar</button>
+    </div>
+
+    <div class="invocacion-acciones">
+      <button class="boton fantasma" id="grabar" type="button">Mantén para hablar</button>
+      <button class="boton fantasma" id="cerrar" type="button">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const $ = (s) => document.querySelector(s);
+
+  /* ── Navegación entre vistas ─────────────────────────── */
+  const botones = document.querySelectorAll('.nav-btn');
+  botones.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      botones.forEach((b) => b.setAttribute('aria-selected', String(b === btn)));
+      document.querySelectorAll('.vista').forEach((v) => v.classList.remove('activa'));
+      $('#v-' + btn.dataset.va).classList.add('activa');
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  });
+
+  /* ── Aviso efímero ───────────────────────────────────── */
+  const aviso = $('#aviso');
+  let avisoTimer;
+  function avisar(texto) {
+    aviso.textContent = texto;
+    aviso.classList.add('visible');
+    clearTimeout(avisoTimer);
+    avisoTimer = setTimeout(() => aviso.classList.remove('visible'), 3400);
+  }
+
+  /* ── Ver el correo que causó la acción ───────────────── */
+  document.querySelectorAll('.ver-correo').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const caja = document.getElementById(btn.dataset.abre);
+      const abierto = caja.classList.toggle('abierto');
+      btn.textContent = abierto ? 'Ocultar' : (btn.dataset.abre === 'c3' ? 'Ver el detalle' : 'Ver el correo');
+    });
+  });
+
+  /* ── Deshacer ────────────────────────────────────────── */
+  document.querySelectorAll('.deshacer').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.textContent = 'Deshecho';
+      avisar('Listo, lo devolví como estaba.');
+    });
+  });
+
+  /* ── Invocar ─────────────────────────────────────────── */
+  const panel = $('#invocacion');
+  const campo = $('#texto');
+  const transcrito = $('#transcrito');
+  const onda = $('#onda');
+  const titulo = $('#inv-titulo');
+  let ultimoFoco = null;
+
+  for (let i = 0; i < 28; i++) onda.appendChild(document.createElement('i'));
+  const barras = onda.querySelectorAll('i');
+
+  function abrir() {
+    ultimoFoco = document.activeElement;
+    panel.classList.add('abierta');
+    setTimeout(() => campo.focus(), 60);
+  }
+
+  function cerrar() {
+    panel.classList.remove('abierta');
+    detenerGrabacion(false);
+    transcrito.hidden = true;
+    transcrito.classList.remove('listo');
+    campo.value = '';
+    titulo.textContent = 'Dile qué necesitas';
+    if (ultimoFoco) ultimoFoco.focus();
+  }
+
+  $('#orbe').addEventListener('click', abrir);
+  $('#cerrar').addEventListener('click', cerrar);
+  panel.addEventListener('click', (e) => { if (e.target === panel) cerrar(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && panel.classList.contains('abierta')) cerrar();
+  });
+
+  function enviar(texto) {
+    const t = (texto || campo.value).trim();
+    if (!t) return;
+    transcrito.hidden = false;
+    transcrito.classList.add('listo');
+    transcrito.innerHTML = '<span>' + t.replace(/[<>&]/g, '') + '</span>' +
+      '<p class="transcrito-nota">Entendido. Te respondo en un momento.</p>';
+    campo.value = '';
+    avisar('Se lo mandé.');
+  }
+
+  $('#enviar').addEventListener('click', () => enviar());
+  campo.addEventListener('keydown', (e) => { if (e.key === 'Enter') enviar(); });
+  document.querySelectorAll('.sugerencia').forEach((s) => {
+    s.addEventListener('click', () => enviar(s.textContent));
+  });
+
+  /* ── Grabación simulada: la onda responde, luego transcribe ── */
+  const btnGrabar = $('#grabar');
+  let grabando = false;
+  let animOnda = null;
+  let finGrabacion = null;
+
+  const FRASE = 'Cancélame el gimnasio del viernes que tengo parcial';
+
+  function pintarOnda() {
+    barras.forEach((b, i) => {
+      const base = Math.sin(Date.now() / 190 + i * 0.55) * 0.5 + 0.5;
+      const alto = 12 + base * Math.random() * 78;
+      b.style.height = alto + '%';
+      b.style.opacity = String(0.35 + base * 0.6);
+    });
+    animOnda = requestAnimationFrame(pintarOnda);
+  }
+
+  function empezarGrabacion() {
+    if (grabando) return;
+    grabando = true;
+    btnGrabar.textContent = 'Suelta para enviar';
+    titulo.textContent = 'Escuchando';
+    onda.hidden = false;
+    transcrito.hidden = true;
+    transcrito.classList.remove('listo');
+    pintarOnda();
+    // En la app real esto es MediaRecorder; aquí se demuestra el flujo.
+    finGrabacion = setTimeout(() => detenerGrabacion(true), 6000);
+  }
+
+  function detenerGrabacion(conResultado) {
+    if (!grabando) return;
+    grabando = false;
+    clearTimeout(finGrabacion);
+    cancelAnimationFrame(animOnda);
+    onda.hidden = true;
+    btnGrabar.textContent = 'Mantén para hablar';
+    titulo.textContent = 'Dile qué necesitas';
+    if (!conResultado) return;
+
+    transcrito.hidden = false;
+    transcrito.textContent = 'Transcribiendo…';
+    setTimeout(() => {
+      transcrito.classList.add('listo');
+      transcrito.innerHTML = '<span>' + FRASE + '</span>' +
+        '<p class="transcrito-nota">Esto entendí. Confirma antes de que lo quite.</p>';
+      avisar('Te lo muestro antes de tocar nada.');
+    }, 700);
+  }
+
+  btnGrabar.addEventListener('pointerdown', empezarGrabacion);
+  btnGrabar.addEventListener('pointerup', () => detenerGrabacion(true));
+  btnGrabar.addEventListener('pointerleave', () => detenerGrabacion(true));
+  btnGrabar.addEventListener('keydown', (e) => {
+    if ((e.key === ' ' || e.key === 'Enter') && !grabando) { e.preventDefault(); empezarGrabacion(); }
+  });
+  btnGrabar.addEventListener('keyup', (e) => {
+    if (e.key === ' ' || e.key === 'Enter') detenerGrabacion(true);
+  });
+})();
+</script>

@@ -324,11 +324,16 @@ sombra producen el dataset.
 
 ## 13. Módulo financiero
 
-Extrae de correos bancarios y de pagos: monto, moneda, fecha, contraparte,
-concepto. Categoriza. Convierte a COP con la **TRM del día de la transacción**
-(fuente pública consultada a diario y cacheada por fecha; si no responde, se usa
-la última conocida y se marca el movimiento como TRM aproximada). *El endpoint
-concreto de TRM se verifica el primer día.*
+El eje es simple: **entra plata a sus cuentas y sale plata.** Extrae de correos
+bancarios y de pagos el monto, la fecha, la contraparte y el concepto, lo
+categoriza y lo registra. Nada de suponer que el dinero viene del exterior.
+
+**Moneda extranjera: caso borde, no el eje.** Si llega un movimiento en otra
+moneda se convierte a COP con la TRM del día de la transacción (fuente pública
+consultada a diario y cacheada por fecha; si no responde, se usa la última
+conocida y el movimiento queda marcado como TRM aproximada). Se implementa
+**después** del flujo en pesos, no antes. *El endpoint concreto de TRM se
+verifica cuando toque ese caso.*
 
 Detecta facturas con fecha límite → `cuentas_por_pagar` → alerta antes del
 vencimiento. Señala cobros duplicados y cargos atípicos.
