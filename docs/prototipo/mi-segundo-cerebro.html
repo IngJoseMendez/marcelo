@@ -40,6 +40,10 @@
 
 * { box-sizing: border-box; }
 
+/* El margen por defecto del navegador en p/h infla todo el ritmo vertical.
+   Cada separación de esta hoja es explícita. */
+h1, p { margin: 0; }
+
 body {
   margin: 0;
   background: var(--vacio);
@@ -352,16 +356,26 @@ body::after {
 /* Lo pendiente: luz fría */
 .placa.pendiente { border-left: 2px solid var(--luna); }
 
-/* Lo que ya pasó: ceniza */
-.placa.pasado { opacity: 0.42; }
+/* Lo que ya pasó: ceniza. Legible, pero claramente atrás. */
+.placa.pasado { opacity: 0.55; }
 
-/* Lo que ELLA tocó: brasa. Su presencia es luz. */
+/* La hora de un hueco que ella liberó */
+.hora.liberada {
+  color: var(--brasa);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  opacity: 0.75;
+}
+
+/* Lo que ELLA tocó: brasa. Su presencia es luz.
+   Vale igual si lo movió o si lo quitó: su mano deja calor. */
 .placa.tocado {
   border-left: 2px solid var(--brasa);
   background: linear-gradient(90deg, var(--brasa-hum), var(--ceniza) 55%);
 }
 
-.placa.tocado .placa-titulo {
+/* Sólo lo cancelado se tacha. Lo movido sigue vivo. */
+.placa.cancelado .placa-titulo {
   text-decoration: line-through;
   text-decoration-color: var(--brasa);
   text-decoration-thickness: 1px;
@@ -699,11 +713,11 @@ body::after {
 
 /* ── Invocar ──────────────────────────────────────────────── */
 
+/* Fuera de la columna de contenido: pulgar derecho, sin tapar nada. */
 .orbe {
   position: fixed;
-  bottom: 4.75rem;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 4.5rem;
+  right: max(1.125rem, calc(50% - 230px + 1.125rem));
   z-index: 45;
   width: 3.5rem;
   height: 3.5rem;
@@ -724,7 +738,7 @@ body::after {
   50%     { box-shadow: 0 0 34px rgba(217,142,51,0.42), inset 0 0 18px rgba(217,142,51,0.28) }
 }
 
-.orbe:active { transform: translateX(-50%) scale(0.94); }
+.orbe:active { transform: scale(0.94); }
 .orbe:focus-visible { outline: 2px solid var(--brasa-alta); outline-offset: 4px; }
 
 .orbe-nucleo {
@@ -775,6 +789,9 @@ body::after {
   height: 3rem;
   margin-bottom: 1rem;
 }
+
+/* display:flex le gana al UA stylesheet de [hidden]: hay que decirlo aquí. */
+.onda[hidden] { display: none; }
 
 .onda i {
   width: 3px;
@@ -899,12 +916,13 @@ body::after {
   line-height: 1.5;
 }
 
+/* Arriba: el panel de voz sube desde abajo y ahí chocaban. */
 .aviso {
   position: fixed;
-  bottom: 9.5rem;
+  top: 0.875rem;
   left: 50%;
-  transform: translateX(-50%) translateY(0.75rem);
-  z-index: 70;
+  transform: translateX(-50%) translateY(-0.75rem);
+  z-index: 80;
   background: var(--ceniza-alt);
   border: 1px solid var(--brasa);
   border-left-width: 2px;
@@ -1014,8 +1032,8 @@ body::after {
       </div>
 
       <div class="bloque">
-        <p class="hora">16:00</p>
-        <div class="placa tocado">
+        <p class="hora liberada">16:00</p>
+        <div class="placa tocado cancelado">
           <p class="placa-titulo">Cálculo</p>
           <p class="placa-meta">16:00 – 17:00 · prof. Ramírez</p>
           <p class="huella">
@@ -1027,7 +1045,7 @@ body::after {
 
       <div class="bloque">
         <p class="hora">16:00</p>
-        <div class="placa pendiente">
+        <div class="placa tocado">
           <p class="placa-titulo">Grupo de estudio</p>
           <p class="placa-meta">16:00 – 18:00 · con Andrés y Sara</p>
           <p class="huella">
