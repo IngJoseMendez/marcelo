@@ -1,5 +1,6 @@
-# Asistente autónoma de correo, agenda y finanzas — Diseño
+# Mi Segundo Cerebro — Diseño
 
+**Producto:** «Mi Segundo Cerebro» (nombre elegido por el cliente)
 **Fecha:** 2026-07-30
 **Cliente:** Marcelo (usuario único)
 **Origen:** nota de voz de 62 s enviada por el cliente
@@ -36,9 +37,11 @@ Una asistente personal autónoma que:
    un compromiso que ella conoce.
 3. **Lleva un libro contable** alimentado de correos bancarios y de pagos, con
    conversión a COP, categorización, cuentas por pagar y alertas de vencimiento.
-4. **Recibe órdenes habladas** por Telegram: él le enseña compromisos, consulta,
-   corrige y deshace, todo por nota de voz.
-5. **Rinde cuentas** en un resumen diario y en un panel web móvil.
+4. **Recibe órdenes habladas o escritas** por **dos canales equivalentes**:
+   Telegram y la propia app. Él le enseña compromisos, consulta, corrige y
+   deshace, hablando o escribiendo, desde donde esté.
+5. **Rinde cuentas** en un resumen diario y en la app, que muestra la parrilla
+   del día y la crónica de todo lo que hizo sola.
 
 ## 3. Decisiones tomadas
 
@@ -343,9 +346,90 @@ apagón reprocesa un rango. Sin ese hash el libro cuenta dos veces el mismo
 ingreso y **queda mintiendo en silencio**, que es la peor forma de fallar en
 contabilidad.
 
-## 14. Panel web
+## 14. La app «Mi Segundo Cerebro»
 
 **Next.js en Vercel, PWA instalable, mobile-first.**
+
+No es un panel de solo lectura: es el **segundo canal de conversación**, con las
+mismas capacidades que Telegram. Desde la app él puede **hablarle o escribirle**
+para pedirle cualquier cosa.
+
+### El canal de instrucciones es agnóstico al medio
+
+Telegram y la app son dos entradas del **mismo** intérprete:
+
+```
+Telegram (voz | texto) ─┐
+                        ├─▶ Transcriptor ─▶ Intérprete ─▶ POLÍTICA ─▶ ACTÚA
+App     (voz | texto) ──┘                                             AUDITA
+```
+
+Una instrucción lleva `{canal: 'telegram'|'web', origen: 'voz'|'texto'}`. El
+`canal` sólo decide por dónde vuelve la respuesta; el `origen` es lo que decide
+la desconfianza — y por tanto **el audio grabado en la app confirma las acciones
+destructivas exactamente igual que el de Telegram**. La transcripción puede
+mentir venga de donde venga.
+
+Consecuencia práctica: una vez existe el canal de Telegram, el de la app es casi
+gratis. Comparten transcriptor, intérprete, política, actuador y auditoría.
+
+**Grabación en el navegador:** `MediaRecorder` produce webm/opus, que va por el
+BFF al mismo transcriptor. Mientras graba, la app muestra el nivel de audio en
+vivo; al soltar, muestra la transcripción **antes** de ejecutar, para que él vea
+qué entendió.
+
+### Arquitectura
+
+```
+📱 App (Next.js en Vercel)
+      │  route handlers = BFF — el token de servicio nunca llega al navegador
+      ▼
+🔒 Cloudflare Tunnel   ← el mismo que ya se necesita para el push de Gmail
+      ▼
+💻 Laptop de Marcelo: API Fastify + Postgres
+```
+
+**Autenticación: código de un solo uso enviado por el bot de Telegram.** Sin
+contraseñas, sin OAuth, sin tabla de usuarios. Está autenticado por poseer el
+teléfono. Sesión en cookie `httpOnly` firmada. La app muestra movimientos
+bancarios: una URL secreta no es autenticación.
+
+### Pantallas
+
+| Pantalla | Contenido |
+|---|---|
+| **Jornada** | la parrilla del día hora por hora, con lo que ella cambió marcado; próximo compromiso destacado |
+| **Crónica** | log de auditoría: cada acción autónoma con su correo origen, confianza y botón deshacer |
+| **Tesoro** | balance del mes, gráfica, movimientos, cuentas por pagar y vencimientos |
+| **Compromisos** | lo que le ha enseñado, editable |
+| **Hablar** | presente en todas: botón de voz y campo de texto siempre a mano |
+
+La **Crónica** es la contraparte visible de la autonomía: convierte "me da miedo
+darle permisos" en "ya veo qué hizo y por qué".
+
+Con el backend caído, la app muestra **"sin conexión desde las 14:20"**, no un
+spinner eterno.
+
+### Dirección estética
+
+El cliente pidió explícitamente una estética **Dark Souls / Elden Ring /
+Berserk**: oscuridad, oro y brasa, tipografía con peso, ornamento contenido,
+sensación de artefacto antiguo.
+
+**La regla que evita que se vuelva ilegible:** el tema vive en el *marco*
+—fondo, tipografía de títulos, color de acento, texturas, bordes, movimiento— y
+**los datos se mantienen nítidos y de alto contraste**. Una hora, un monto y un
+nombre de clase se leen de un vistazo o la app fracasa, por bonita que sea.
+
+Vocabulario de la interfaz, coherente con el mundo pero sin sacrificar claridad:
+
+| Concepto | Nombre en la app |
+|---|---|
+| Agenda del día | **Jornada** |
+| Registro de acciones autónomas | **Crónica** |
+| Finanzas | **Tesoro** |
+| Compromisos recurrentes | **Pactos** |
+| Hablarle a la asistente | **Invocar** |
 
 ```
 📱 Vercel (Next.js)
