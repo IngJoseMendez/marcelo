@@ -6,6 +6,7 @@ import type {
 } from '../../src/puertos/sumidero-calendario.ts'
 
 export class CalendarioFalso implements SumideroCalendario {
+  public readonly sombra = false
   public seriesBorradas: string[] = []
 
   constructor(private instancias: EventoInstancia[] = []) {}

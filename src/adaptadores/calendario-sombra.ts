@@ -15,6 +15,7 @@ import type {
  * sombra fuera un flujo aparte, estaríamos midiendo otro sistema.
  */
 export class CalendarioSombra implements SumideroCalendario {
+  public readonly sombra = true
   public readonly aplicadas: AccionCalendario[] = []
 
   constructor(private readonly lector: SumideroCalendario) {}

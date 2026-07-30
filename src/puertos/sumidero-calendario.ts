@@ -37,6 +37,13 @@ export type Inversa =
     }
 
 export interface SumideroCalendario {
+  /**
+   * Si este sumidero sólo ensaya. Vive en el puerto, y no como bandera
+   * aparte, para que sea imposible marcar una acción como "sombra"
+   * mientras el calendario real sí se está escribiendo.
+   */
+  readonly sombra: boolean
+
   instanciasEnRango(
     calendarId: string,
     eventoId: string,
