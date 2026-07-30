@@ -426,7 +426,8 @@ bancarios: una URL secreta no es autenticación.
 
 | Pantalla | Contenido |
 |---|---|
-| **Jornada** | la parrilla del día hora por hora, con lo que ella cambió marcado; próximo compromiso destacado |
+| **Jornada** | el día en dos vistas conmutables: **lista** (densa, para leer rápido) y **agenda** (rejilla horaria tipo Google Calendar, para ver dónde hay hueco) |
+| **Bandeja** | lo que hay por hacer, con prioridad y duración, listo para caer en un hueco |
 | **Crónica** | log de auditoría: cada acción autónoma con su correo origen, confianza y botón deshacer |
 | **Tesoro** | balance del mes, gráfica, movimientos, cuentas por pagar y vencimientos |
 | **Compromisos** | lo que le ha enseñado, editable |
@@ -437,6 +438,60 @@ darle permisos" en "ya veo qué hizo y por qué".
 
 Con el backend caído, la app muestra **"sin conexión desde las 14:20"**, no un
 spinner eterno.
+
+### Vista de agenda: la rejilla horaria
+
+La lista es buena para leer el día; es **ciega al espacio vacío**. Un hueco de
+dos horas entre clases no se ve en una lista, pero salta a la vista en una
+rejilla. Por eso la Jornada tiene dos vistas conmutables sobre los mismos datos:
+
+- **Lista** — densa, cronológica, para revisar rápido en el bus.
+- **Agenda** — rejilla tipo Google Calendar: horas a la izquierda, cada evento
+  como un bloque cuya **altura es su duración**, solapes en columnas paralelas,
+  línea de «ahora» cruzando, y los huecos libres explícitamente visibles.
+
+La regla de color se mantiene en las dos: lo que la asistente tocó va iluminado,
+lo de Marcelo es mate.
+
+**Por qué importa aquí:** la rejilla es donde aterriza la bandeja. Ver el hueco
+y ver lo que cabe en él es la misma operación.
+
+## 15. Bandeja de intenciones
+
+Una **intención** es algo que Marcelo tiene que hacer pero que todavía no está
+en el calendario: un taller para entregar, un correo por responder, estudiar
+para el parcial. Nace de tres sitios: la asistente la detecta en un correo, él
+la dicta por voz, o la escribe.
+
+Cada intención lleva:
+
+| Campo | Para qué |
+|---|---|
+| **Prioridad** | `urgente · alta · normal · baja` |
+| **Duración estimada** | en bloques de 15, 30, 60 o 120 minutos |
+| **Vence el** | fecha límite, si la tiene |
+| **Estado** | `pendiente · agendada · hecha · descartada` |
+
+**Duración en bloques, no en minutos sueltos.** Nadie sabe si algo toma 37 o 43
+minutos, y pedir precisión falsa hace que el usuario deje de estimar. Cuatro
+bloques bastan para decidir si algo cabe en un hueco.
+
+**La prioridad la calcula el código, no el modelo.** El LLM propone una base a
+partir del texto, pero la fecha límite manda: algo que vence mañana es urgente
+aunque el correo suene tranquilo. Es la misma disciplina del resto del sistema —
+el modelo lee, el código decide.
+
+### Agendar es una acción como cualquier otra
+
+Meter una intención en un hueco **crea un evento en el calendario**, así que pasa
+por el mismo camino que todo lo demás: política de autonomía, auditoría con su
+inversa, y deshacer. Una intención agendada por error se revierte igual que una
+clase cancelada por error, y el evento se borra al deshacer.
+
+La asistente puede **proponer** el hueco —«tienes dos horas libres el jueves,
+¿meto ahí el estudio del parcial?»— pero eso es una acción de calendario y la
+política decide si la hace callada, avisando o preguntando. No hay una segunda
+vía de escritura: si la hubiera, agenda y auditoría se desincronizarían.
 
 ### Dirección estética: «Luminoso»
 
