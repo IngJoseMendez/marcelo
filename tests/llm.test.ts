@@ -1,0 +1,173 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { esRuidoObvio } from '../src/pipeline/prefiltro.ts'
+import { crearClasificador } from '../src/pipeline/clasificador.ts'
+import { crearExtractor } from '../src/pipeline/extractor.ts'
+import { crearDesempate } from '../src/pipeline/desempate.ts'
+import { LlmFalso } from './fakes/llm-falso.ts'
+import type { CorreoCrudo, Compromiso } from '../src/dominio/tipos.ts'
+import type { Candidato } from '../src/dominio/resolutor.ts'
+
+const correo = (over: Partial<CorreoCrudo> = {}): CorreoCrudo => ({
+  cuentaId: 1, messageId: 'm1', threadId: null,
+  remitente: 'ramirez@uni.edu.co', asunto: 'Clase de hoy',
+  cuerpo: 'No, no, la clase de hoy se cancela',
+  recibidoEn: '2026-08-04T14:14:00-05:00', etiquetas: ['INBOX'],
+  ...over,
+})
+
+// ── prefiltro ───────────────────────────────────────────────────
+
+test('descarta promociones de Gmail sin gastar un token', () => {
+  assert.equal(esRuidoObvio(correo({ etiquetas: ['CATEGORY_PROMOTIONS'] }), 'gmail', []), true)
+})
+
+test('descarta la carpeta de correo no deseado de Outlook', () => {
+  assert.equal(esRuidoObvio(correo({ etiquetas: ['junkemail'] }), 'outlook', []), true)
+})
+
+test('cada proveedor usa sus propias etiquetas de ruido', () => {
+  // Una etiqueta de Gmail no significa nada en Outlook y viceversa.
+  assert.equal(esRuidoObvio(correo({ etiquetas: ['CATEGORY_PROMOTIONS'] }), 'outlook', []), false)
+  assert.equal(esRuidoObvio(correo({ etiquetas: ['junkemail'] }), 'gmail', []), false)
+})
+
+test('descarta remitentes que él pidió ignorar', () => {
+  assert.equal(
+    esRuidoObvio(correo({ remitente: 'Notificaciones <no-reply@banco.com>' }), 'gmail',
+      ['no-reply@banco.com']), true)
+})
+
+test('el emparejamiento de remitente ignora mayúsculas y nombre visible', () => {
+  assert.equal(
+    esRuidoObvio(correo({ remitente: 'Banco <NO-REPLY@Banco.com>' }), 'gmail',
+      ['no-reply@banco.com']), true)
+})
+
+test('deja pasar un correo normal de la bandeja', () => {
+  assert.equal(esRuidoObvio(correo(), 'gmail', []), false)
+})
+
+// ── clasificador ────────────────────────────────────────────────
+
+test('devuelve la clasificación validada del modelo', async () => {
+  const llm = new LlmFalso([{ clasificacion: 'agenda', confianza: 'alta' }])
+  const r = await crearClasificador(llm, 'modelo-x').clasificar(correo())
+  assert.equal(r.clasificacion, 'agenda')
+  assert.equal(r.confianza, 'alta')
+})
+
+test('el cuerpo se recorta antes de mandarlo al modelo', async () => {
+  const llm = new LlmFalso([{ clasificacion: 'ruido', confianza: 'alta' }])
+  await crearClasificador(llm, 'm').clasificar(correo({ cuerpo: 'x'.repeat(10_000) }))
+  assert.ok(llm.peticiones[0]!.usuario.length < 4_000)
+})
+
+test('una clasificación fuera del enum revienta la validación', async () => {
+  const llm = new LlmFalso([{ clasificacion: 'inventada', confianza: 'alta' }])
+  await assert.rejects(() => crearClasificador(llm, 'm').clasificar(correo()))
+})
+
+// ── extractor ───────────────────────────────────────────────────
+
+const hecho = (over: Record<string, unknown> = {}) => ({
+  intencion: 'cancelar', referente: { tipo: 'hoy' },
+  nuevoInicio: null, nuevoFin: null, menciones: ['clase'], confianza: 'alta',
+  ...over,
+})
+
+test('extrae la intención con el referente en crudo', async () => {
+  const llm = new LlmFalso([hecho()])
+  const r = await crearExtractor(llm, 'm').extraer(correo(), correo().recibidoEn)
+  assert.equal(r.intencion, 'cancelar')
+  assert.deepEqual(r.referente, { tipo: 'hoy' })
+})
+
+test('la fecha de recepción se le entrega al modelo como contexto', async () => {
+  const llm = new LlmFalso([hecho({ intencion: 'ninguna', referente: { tipo: 'desconocido' } })])
+  await crearExtractor(llm, 'm').extraer(correo(), '2026-08-04T14:14:00-05:00')
+  assert.ok(llm.peticiones[0]!.usuario.includes('2026-08-04'))
+})
+
+test('rechaza una fecha que el modelo intentó calcular en prosa', async () => {
+  // El esquema no admite texto libre en iso: si el modelo devuelve
+  // "el miércoles" en vez de una fecha, no valida y se reintenta.
+  const llm = new LlmFalso([hecho({ referente: { tipo: 'fecha', iso: 'el miércoles' } })])
+  await assert.rejects(() => crearExtractor(llm, 'm').extraer(correo(), correo().recibidoEn))
+})
+
+test('acepta un día de la semana con modificador', async () => {
+  const llm = new LlmFalso([
+    hecho({ referente: { tipo: 'dia_semana', dia: 3, modificador: 'proximo' } })])
+  const r = await crearExtractor(llm, 'm').extraer(correo(), correo().recibidoEn)
+  assert.equal(r.referente.tipo, 'dia_semana')
+})
+
+test('un cambio de horario trae inicio y fin nuevos', async () => {
+  const llm = new LlmFalso([
+    hecho({ intencion: 'mover', referente: { tipo: 'manana' },
+            nuevoInicio: '18:00', nuevoFin: '19:00' })])
+  const r = await crearExtractor(llm, 'm').extraer(correo(), correo().recibidoEn)
+  assert.equal(r.intencion, 'mover')
+  assert.equal(r.nuevoInicio, '18:00')
+})
+
+test('rechaza una hora con formato inválido', async () => {
+  const llm = new LlmFalso([hecho({ intencion: 'mover', nuevoInicio: '6pm', nuevoFin: '7pm' })])
+  await assert.rejects(() => crearExtractor(llm, 'm').extraer(correo(), correo().recibidoEn))
+})
+
+// ── desempate ───────────────────────────────────────────────────
+
+const compromisoBase = {
+  rrule: null, horaInicio: '16:00', horaFin: '17:00', tz: 'America/Bogota',
+  googleCalendarId: 'primary', googleEventId: 'e', activo: true,
+  remitentesVinculados: [], alias: [] as string[],
+}
+const cand = (id: number, titulo: string): Candidato => ({
+  compromiso: { ...compromisoBase, id, titulo } as Compromiso,
+  puntaje: 50, senales: ['remitente_vinculado'],
+})
+
+test('elige el candidato que devuelve el modelo', async () => {
+  const llm = new LlmFalso([{ compromisoId: 3, justificacion: 'menciona taller' }])
+  const r = await crearDesempate(llm, 'm').elegir(
+    [cand(1, 'Cálculo'), cand(3, 'Taller de Cálculo')], 'El taller de hoy se cancela')
+  assert.equal(r?.compromiso.id, 3)
+})
+
+test('si el modelo inventa un id fuera de la lista, devuelve null', async () => {
+  // La garantía estructural: una alucinación se vuelve pregunta, jamás
+  // un borrado. No depende de que el modelo sea bueno.
+  const llm = new LlmFalso([{ compromisoId: 99, justificacion: 'inventado' }])
+  const r = await crearDesempate(llm, 'm').elegir([cand(1, 'Cálculo'), cand(3, 'Taller')], 'algo')
+  assert.equal(r, null)
+})
+
+test('si el modelo dice que no puede decidir, devuelve null', async () => {
+  const llm = new LlmFalso([{ compromisoId: null, justificacion: 'ambiguo' }])
+  const r = await crearDesempate(llm, 'm').elegir([cand(1, 'Cálculo'), cand(3, 'Taller')], 'algo')
+  assert.equal(r, null)
+})
+
+test('sólo se le muestran al modelo los candidatos reales', async () => {
+  const llm = new LlmFalso([{ compromisoId: 1, justificacion: 'ok' }])
+  await crearDesempate(llm, 'm').elegir([cand(1, 'Cálculo'), cand(3, 'Taller')], 'algo')
+  const enviado = llm.peticiones[0]!.usuario
+  assert.ok(enviado.includes('id 1'))
+  assert.ok(enviado.includes('Cálculo'))
+  assert.ok(!enviado.includes('id 99'))
+})
+
+test('con un solo candidato ni consulta al modelo', async () => {
+  const llm = new LlmFalso([])
+  const r = await crearDesempate(llm, 'm').elegir([cand(1, 'Cálculo')], 'algo')
+  assert.equal(r?.compromiso.id, 1)
+  assert.equal(llm.peticiones.length, 0)
+})
+
+test('sin candidatos devuelve null sin consultar', async () => {
+  const llm = new LlmFalso([])
+  assert.equal(await crearDesempate(llm, 'm').elegir([], 'algo'), null)
+  assert.equal(llm.peticiones.length, 0)
+})
