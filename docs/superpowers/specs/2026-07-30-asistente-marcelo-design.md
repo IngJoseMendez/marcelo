@@ -415,18 +415,48 @@ darle permisos" en "ya veo qué hizo y por qué".
 Con el backend caído, la app muestra **"sin conexión desde las 14:20"**, no un
 spinner eterno.
 
-### Dirección estética
+### Dirección estética: «Luminoso»
 
-El cliente pidió explícitamente una estética **Dark Souls / Elden Ring /
-Berserk**: oscuridad, oro y brasa, tipografía con peso, ornamento contenido,
-sensación de artefacto antiguo.
+Se exploraron tres direcciones en paralelo (clara y aireada; oscura acristalada;
+táctil y con color saturado) y el cliente eligió la primera. *Una propuesta
+previa con estética Dark Souls fue rechazada por completo: no se ve moderna.*
 
-**La regla que evita que se vuelva ilegible:** el tema vive en el *marco*
-—fondo, tipografía de títulos, color de acento, texturas, bordes, movimiento— y
-**los datos se mantienen nítidos y de alto contraste**. Una hora, un monto y un
-nombre de clase se leen de un vistazo o la app fracasa, por bonita que sea.
+Claro, aireado y suave, con el tema oscuro trabajado con el mismo cuidado. Aire
+generoso, sombras grandes y difusas en vez de bordes duros, esquinas redondeadas,
+jerarquía por tamaño y peso en vez de por ornamento.
 
-Vocabulario de la interfaz, coherente con el mundo pero sin sacrificar claridad:
+**La firma: la luz de ella.** Todo lo que la asistente toca queda *iluminado* —
+hilo encendido, halo de color, nodo lleno. Lo que puso Marcelo es mate. De ahí
+sale la regla que ordena toda la paleta:
+
+> **El acento nunca significa otra cosa.** El violeta marca la mano de la
+> asistente y nada más. Verde, rojo y ámbar son semánticos y viven aparte.
+
+Así sobrevive la idea central del producto —distinguir de un vistazo lo que ella
+tocó— sin depender de ninguna estética en particular.
+
+**Paleta** (tokens CSS con mapeo por tema; el conmutador gana sobre el sistema en
+ambos sentidos, verificado):
+
+| Rol | Claro | Oscuro |
+|---|---|---|
+| Lienzo | `#F5F5FA` | `#0C0B15` |
+| Papel | `#FFFFFF` | `#17162B` |
+| Tinta | `#16142A` | `#F2F1F9` |
+| **Lumen** (la mano de ella) | `#5B3DF6` | `#9C8BFF` |
+| Lumen secundario | `#2FC9DE` | `#5FE1F0` |
+| Positivo · negativo · aviso | `#0E9A6C` · `#D93B50` · `#A96A08` | `#40D69A` · `#FF7086` · `#F0B355` |
+
+**Tipografía:** pila del sistema (`Segoe UI Variable Display/Text`, `SF Pro`,
+`system-ui`) más una mono para horas y montos. Sin webfonts enlazadas: la CSP de
+la plataforma las bloquea y fallan en silencio.
+
+**Movimiento:** contexto de app móvil, así que manda el pulido de producción y
+en segundo lugar la contención. Resortes con curva `linear()`, entradas
+escalonadas cortas, y `prefers-reduced-motion` respetado en todo. Nada se anima
+por adorno.
+
+Vocabulario de la interfaz:
 
 | Concepto | Nombre en la app |
 |---|---|
