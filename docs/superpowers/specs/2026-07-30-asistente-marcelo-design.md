@@ -48,7 +48,8 @@ Una asistente personal autónoma que:
 | Decisión | Elección | Motivo |
 |---|---|---|
 | Alcance | Usuario único (Marcelo) | Evita verificación de Google y auditoría CASA |
-| Correo/Calendario | Google (Gmail + Calendar) | Push por Pub/Sub; excepciones nativas en series recurrentes |
+| Correo | **Gmail + Outlook, multi-cuenta** | El cliente recibe correo en ambos. Entran como dos adaptadores del mismo puerto `FuenteCorreo` |
+| Calendario | Google Calendar (destino único) | Excepciones nativas en series recurrentes: cancelar sólo el miércoles de esta semana sin romper la serie. Un solo calendario evita que agenda y libro se desincronicen |
 | Canal de control | Telegram | Sin ventana de 24 h ni plantillas; notas de voz nativas; gratis |
 | Autonomía | Graduada + deshacer + resumen diario | Cumple "no me avises" sin dejarlo ciego |
 | Arranque | Modo sombra 2 semanas | Medir precisión antes de soltar la correa |
@@ -165,8 +166,30 @@ reglas                 id · tipo · patron · accion · creada_por · creada_en
 
 pendientes_resumen     id · texto · prioridad · enviado_en
 
-estado_sync            historyId de Gmail · ultimo_watch_renovado_en · latido
+cuentas_correo         proveedor(gmail|outlook) · direccion · activa
+                       credenciales cifradas
+
+sync_cuenta            cuenta_id · cursor · suscripcion_vence_en
+                       ultimo_latido
+                       (cursor = historyId en Gmail, deltaLink en Outlook)
 ```
+
+### Multi-proveedor de correo
+
+Las dos fuentes producen el **mismo** `CorreoCrudo` y de ahí en adelante el
+pipeline no sabe ni le importa de dónde vino. Lo que sí difiere y queda dentro
+de cada adaptador:
+
+| | Gmail | Outlook (Microsoft Graph) |
+|---|---|---|
+| Aviso de correo nuevo | `watch()` → Pub/Sub | subscription → webhook |
+| Caducidad de la suscripción | 7 días | ~3 días (renovación más frecuente) |
+| Cursor incremental | `historyId` | `deltaLink` |
+| Prefiltro sin costo | categorías `CATEGORY_PROMOTIONS` / `CATEGORY_SOCIAL` | carpeta y `inferenceClassification: other` |
+
+El prefiltro se define **por adaptador** porque cada proveedor clasifica el ruido
+a su manera; el resto del pipeline es idéntico. Añadir un tercer proveedor
+después es escribir un adaptador, nada más.
 
 ## 6. Pipeline de correo
 

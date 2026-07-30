@@ -317,16 +317,29 @@ CREATE TABLE IF NOT EXISTS compromisos (
   creado_en              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- El cliente recibe correo en Gmail y en Outlook. Cada cuenta es una fuente.
+CREATE TABLE IF NOT EXISTS cuentas_correo (
+  id          BIGSERIAL PRIMARY KEY,
+  proveedor   TEXT NOT NULL CHECK (proveedor IN ('gmail','outlook')),
+  direccion   TEXT NOT NULL,
+  activa      BOOLEAN NOT NULL DEFAULT TRUE,
+  creada_en   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (proveedor, direccion)
+);
+
 CREATE TABLE IF NOT EXISTS correos_procesados (
   id             BIGSERIAL PRIMARY KEY,
-  message_id     TEXT NOT NULL UNIQUE,
+  cuenta_id      BIGINT NOT NULL REFERENCES cuentas_correo(id),
+  message_id     TEXT NOT NULL,
   thread_id      TEXT,
   remitente      TEXT NOT NULL,
   asunto         TEXT,
   recibido_en    TIMESTAMPTZ NOT NULL,
   clasificacion  TEXT,
   estado         TEXT NOT NULL DEFAULT 'pendiente',
-  procesado_en   TIMESTAMPTZ
+  procesado_en   TIMESTAMPTZ,
+  -- Los identificadores de mensaje sólo son únicos dentro de su proveedor.
+  UNIQUE (cuenta_id, message_id)
 );
 
 CREATE TABLE IF NOT EXISTS acciones (
@@ -354,15 +367,13 @@ CREATE TABLE IF NOT EXISTS cola (
   encolado_en   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS estado_sync (
-  id                       INT PRIMARY KEY DEFAULT 1,
-  history_id               TEXT,
-  watch_renovado_en        TIMESTAMPTZ,
-  ultimo_latido            TIMESTAMPTZ,
-  CONSTRAINT una_sola_fila CHECK (id = 1)
+-- Un cursor por cuenta: historyId en Gmail, deltaLink en Outlook.
+CREATE TABLE IF NOT EXISTS sync_cuenta (
+  cuenta_id             BIGINT PRIMARY KEY REFERENCES cuentas_correo(id),
+  cursor                TEXT,
+  suscripcion_vence_en  TIMESTAMPTZ,
+  ultimo_latido         TIMESTAMPTZ
 );
-
-INSERT INTO estado_sync (id) VALUES (1) ON CONFLICT DO NOTHING;
 
 CREATE INDEX IF NOT EXISTS idx_acciones_creada ON acciones (creada_en DESC);
 CREATE INDEX IF NOT EXISTS idx_cola_estado ON cola (estado, encolado_en);
@@ -390,17 +401,39 @@ test('crea todas las tablas del núcleo', async () => {
     `SELECT table_name FROM information_schema.tables WHERE table_schema='public'`
   )
   const tablas = rows.map((r) => r.table_name)
-  for (const t of ['compromisos','correos_procesados','acciones','cola','estado_sync']) {
+  for (const t of ['cuentas_correo','compromisos','correos_procesados',
+                   'acciones','cola','sync_cuenta']) {
     assert.ok(tablas.includes(t), `falta la tabla ${t}`)
   }
 })
 
-test('message_id es único', async () => {
-  const ins = `INSERT INTO correos_procesados (message_id, remitente, recibido_en)
-               VALUES ($1,'a@b.com', now())`
-  await pool.query(ins, ['dup-1'])
-  await assert.rejects(() => pool.query(ins, ['dup-1']), /duplicate key/)
+test('el mismo message_id se rechaza dentro de una cuenta', async () => {
+  const { rows } = await pool.query<{ id: string }>(
+    `INSERT INTO cuentas_correo (proveedor, direccion) VALUES ('gmail','a@b.com')
+     ON CONFLICT (proveedor, direccion) DO UPDATE SET activa = TRUE RETURNING id`)
+  const cuenta = rows[0]!.id
+  const ins = `INSERT INTO correos_procesados (cuenta_id, message_id, remitente, recibido_en)
+               VALUES ($1,$2,'x@y.com', now())`
+  await pool.query(ins, [cuenta, 'dup-1'])
+  await assert.rejects(() => pool.query(ins, [cuenta, 'dup-1']), /duplicate key/)
   await pool.query(`DELETE FROM correos_procesados WHERE message_id='dup-1'`)
+})
+
+test('el mismo message_id SÍ se acepta en cuentas distintas', async () => {
+  // Gmail y Outlook numeran sus mensajes por separado: una colisión entre
+  // proveedores no debe descartar un correo real.
+  const cuentas = await pool.query<{ id: string }>(
+    `INSERT INTO cuentas_correo (proveedor, direccion)
+     VALUES ('gmail','uno@gmail.com'), ('outlook','uno@outlook.com')
+     ON CONFLICT (proveedor, direccion) DO UPDATE SET activa = TRUE RETURNING id`)
+  const ins = `INSERT INTO correos_procesados (cuenta_id, message_id, remitente, recibido_en)
+               VALUES ($1,'mismo-id','x@y.com', now())`
+  await pool.query(ins, [cuentas.rows[0]!.id])
+  await pool.query(ins, [cuentas.rows[1]!.id])
+  const { rows: n } = await pool.query(
+    `SELECT count(*)::int AS n FROM correos_procesados WHERE message_id='mismo-id'`)
+  assert.equal(n[0]!.n, 2)
+  await pool.query(`DELETE FROM correos_procesados WHERE message_id='mismo-id'`)
 })
 
 test('migrar es idempotente', async () => {
