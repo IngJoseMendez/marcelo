@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "configurar": "tsx src/configuracion/abrir.ts",
     "db:migrate": "tsx src/db/migrar-cli.ts",
-    "test": "node --import tsx --test \"tests/**/*.test.ts\""
+    "test": "node --import tsx --test \"tests/**/*.test.ts\"",
+    "respaldo:abrir": "tsx src/cli/restaurar-respaldo.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

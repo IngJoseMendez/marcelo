@@ -252,7 +252,11 @@ npm run dev                          # con API_BASE=http://localhost:4000
 
 ## 4. Verificar que quedó bien
 
-- [ ] `npm test` pasa completo (276 pruebas)
+- [ ] `npm test` pasa completo (298 pruebas)
+- [ ] **Abre un respaldo antes de necesitarlo**: `npm run respaldo:abrir -- respaldos/<archivo>`.
+      Un respaldo que nadie ha probado a abrir no es un respaldo
+- [ ] `RESPALDO_CLAVE` guardada FUERA de la laptop. Si se muere el disco y
+      la clave se fue con él, el respaldo cifrado no sirve de nada
 - [ ] `GROQ_MODELO_TRANSCRIPTOR` puesto (si no, el micrófono de la app responde
       503 y lo dice, y el bot contesta que todavía no sabe oír); y `FFMPEG_RUTA`
       si quieres que normalice el volumen

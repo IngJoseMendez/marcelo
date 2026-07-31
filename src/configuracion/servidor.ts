@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import Fastify from 'fastify'
 import { Client } from 'pg'
 import { escribirEnv, leerEnv } from './archivo-env.ts'
+import { nuevaClaveRespaldo } from '../dominio/cifrado.ts'
 import { revisar, valoresRecordados, type Revision } from './estado.ts'
 import { paginaConfiguracion } from './pagina.ts'
 import { esperarChat, probarBase, probarGroq, probarTelegram } from './verificaciones.ts'
@@ -254,9 +255,18 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
       SECRETO_SESION: env.SECRETO_SESION || randomBytes(32).toString('hex'),
       // Corto y legible: lo va a teclear en un teléfono.
       CODIGO_ACCESO: env.CODIGO_ACCESO || randomBytes(4).toString('hex').toUpperCase(),
+      // La del respaldo nocturno. Es la única que hay que guardar FUERA de
+      // esta laptop: si el disco muere, sin ella el respaldo no se abre.
+      RESPALDO_CLAVE: env.RESPALDO_CLAVE || nuevaClaveRespaldo(),
     }
     await guardar(nuevos)
-    return { ok: true, mensaje: 'Generados y guardados.', rellenar: nuevos }
+    return {
+      ok: true,
+      mensaje: 'Generados y guardados.',
+      rellenar: nuevos,
+      avisos: ['Copia la clave de respaldo a otro sitio (el gestor de contraseñas, un papel). '
+        + 'Si se muere la laptop, sin ella el respaldo no se puede abrir.'],
+    }
   })
 
   app.post('/api/vercel', async (req) => {

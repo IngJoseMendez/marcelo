@@ -32,6 +32,7 @@ import { crearServicioResumen } from './servicios/resumen.ts'
 import { crearServicioConversacion } from './servicios/conversacion.ts'
 import { crearCanalTelegram } from './adaptadores/telegram.ts'
 import { crearEnlacePublico } from './configuracion/enlace.ts'
+import { crearServicioRespaldo, volcarConComando } from './servicios/respaldo.ts'
 import { escribirEnv } from './configuracion/archivo-env.ts'
 import { crearClasificador } from './pipeline/clasificador.ts'
 import { crearExtractor } from './pipeline/extractor.ts'
@@ -306,7 +307,37 @@ export async function arrancarAsistente(config: Config): Promise<void> {
     }, { timezone: config.zonaHoraria })
   }
 
-  // El watch de Gmail caduca a los 7 días y la suscripción de Graph a los 3.
+    // ── El respaldo de cada noche ─────────────────────────────────
+  // El volumen de Docker aguanta apagones; no aguanta que se muera el
+  // disco. Este es el único seguro contra eso, y por eso sale de la
+  // laptop: uno que se queda dentro no es un respaldo.
+  const respaldo = config.respaldo.clave
+    ? crearServicioRespaldo({
+        reloj,
+        volcar: volcarConComando(config.respaldo.comando, config.urlBaseDatos),
+        clave: config.respaldo.clave,
+        carpeta: config.respaldo.carpeta,
+        retenerDias: config.respaldo.dias,
+        enviar: canal?.enviarArchivo,
+        registro: log,
+      })
+    : null
+
+  if (!respaldo) {
+    log.warn('RESPALDO_CLAVE vacío: sin respaldo nocturno. Si se muere el disco, se pierde todo')
+  } else {
+    // A las 3:40, después de renovar el watch y lejos de la hora en que
+    // llega correo.
+    cron.schedule('40 3 * * *', () => {
+      void respaldo.hacer()
+        .then((r) => log.info(
+          { archivo: r.archivo, bytes: r.bytes, fuera: r.fuera, motivo: r.motivo },
+          r.ok ? 'respaldo hecho' : 'respaldo fallido'))
+        .catch((e) => log.error({ err: e }, 'FALLÓ EL RESPALDO DE ESTA NOCHE'))
+    }, { timezone: config.zonaHoraria })
+  }
+
+// El watch de Gmail caduca a los 7 días y la suscripción de Graph a los 3.
   // Si esto falla, el sistema deja de recibir avisos SIN dar ningún error.
   cron.schedule('0 3 * * *', () => {
     if (!config.google.topicoPubsub) return

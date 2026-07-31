@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, type Context } from 'grammy'
+import { Bot, InlineKeyboard, InputFile, type Context } from 'grammy'
 import type { Boton, Mensaje, Notificador } from '../puertos/notificador.ts'
 import type { Audio } from '../puertos/transcriptor.ts'
 import type { ServicioConversacion } from '../servicios/conversacion.ts'
@@ -168,6 +168,19 @@ export function crearCanalTelegram(d: DepsTelegram) {
   return {
     notificador: new NotificadorTelegram(bot, chatId, d.registro),
     conectar,
+
+    /**
+     * Mandar un archivo al chat. Con esto el respaldo de cada noche sale
+     * de la laptop sin necesidad de otra cuenta ni otra factura — y va
+     * cifrado, porque un chat de bot no es un sitio privado.
+     */
+    async enviarArchivo(nombre: string, datos: Uint8Array, leyenda: string): Promise<void> {
+      if (!chatId) throw new Error('sin TELEGRAM_CHAT_ID no hay a quién mandárselo')
+      await bot.api.sendDocument(
+        chatId,
+        new InputFile(Buffer.from(datos), nombre),
+        { caption: leyenda.slice(0, 1000) })
+    },
 
     /**
      * Arranca el long polling. No se espera: no termina nunca.

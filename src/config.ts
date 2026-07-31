@@ -49,6 +49,14 @@ const Esquema = z.object({
   JORNADA_DESDE: z.string().regex(/^\d{2}:\d{2}$/).default('07:00'),
   JORNADA_HASTA: z.string().regex(/^\d{2}:\d{2}$/).default('22:00'),
 
+  // El respaldo de cada noche. Sin clave no se hace: sacar la agenda y los
+  // movimientos del banco en claro no es una opción.
+  RESPALDO_CLAVE: z.string().default(''),
+  RESPALDO_CARPETA: z.string().default('respaldos'),
+  RESPALDO_DIAS: z.coerce.number().int().positive().default(14),
+  RESPALDO_COMANDO: z.string()
+    .default('docker compose exec -T db pg_dump -U asistente -d asistente'),
+
   MODO_SOMBRA: z.string().default('true'),
   PUERTO: z.coerce.number().int().positive().default(3000),
   NIVEL_LOG: z.string().default('info'),
@@ -113,6 +121,13 @@ export function cargarConfig(env: Record<string, string | undefined>) {
       gancho: v.VERCEL_GANCHO.trim(),
     },
     rutaEnv: v.RUTA_ENV.trim() || '.env',
+
+    respaldo: {
+      clave: v.RESPALDO_CLAVE.trim(),
+      carpeta: v.RESPALDO_CARPETA.trim(),
+      dias: v.RESPALDO_DIAS,
+      comando: v.RESPALDO_COMANDO.trim(),
+    },
 
     // Ventana de trabajo: fuera de ella el tiempo libre no cuenta como hueco.
     // Sin esto, «tienes 9 horas libres» incluiría la madrugada.
