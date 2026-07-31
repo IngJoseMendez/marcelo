@@ -336,7 +336,15 @@ function pintarRequisitos(r) {
       + '<b>' + q.nombre + '</b>'
       + (q.imprescindible ? '' : ' <span class="req-op">opcional</span>')
       + '<div class="req-porque">' + q.porque + '</div>'
-      + '<div class="req-estado">' + (marcha && !marcha.hecho ? 'instalando… ' + (marcha.ultima || '') : q.mensaje) + '</div>'
+      // Recién instalado y todavía sin verse: el PATH de este proceso es el
+      // de antes de la instalación, así que hasta reiniciar no aparece.
+      + '<div class="req-estado">' + (
+          marcha && !marcha.hecho
+            ? 'instalando… ' + (marcha.ultima || '')
+            : marcha && marcha.ok && q.salud === 'falta'
+              ? 'Instalado. Cierra esta ventana y vuelve a lanzar ARRANCAR.cmd para que lo vea.'
+              : q.mensaje
+        ) + '</div>'
       + '</div>';
 
     if (q.salud !== 'listo' && q.instalable && !(marcha && !marcha.hecho)) {
