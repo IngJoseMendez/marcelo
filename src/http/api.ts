@@ -11,6 +11,8 @@ import type { ServicioCronica } from '../servicios/cronica.ts'
 import type { ServicioAgenda } from '../servicios/agendar.ts'
 import type { ServicioDeshacer } from '../servicios/deshacer.ts'
 import type { ServicioInstruccion } from '../servicios/instruccion.ts'
+import type { Transcriptor } from '../puertos/transcriptor.ts'
+import { esDeVoz, firmarVoz } from '../dominio/firma-voz.ts'
 import { DURACIONES, calcularPrioridad, redondearDuracion } from '../dominio/intenciones.ts'
 
 export interface DepsApi {
@@ -24,6 +26,10 @@ export interface DepsApi {
   agenda: ServicioAgenda
   deshacer: ServicioDeshacer
   instruccion: ServicioInstruccion
+  /** Si falta, la app no puede mandar audio y lo dice. */
+  transcriptor?: Transcriptor
+  /** Con esto se firma lo que salió del transcriptor. */
+  secretoVoz: string
   repoIntenciones: RepoIntenciones
   repoCompromisos: RepoCompromisos
 }
@@ -50,9 +56,10 @@ const Cerrar = z.object({ estado: z.enum(['hecha', 'descartada']) })
 
 const Instruccion = z.object({
   texto: z.string().min(1).max(2000),
-  // El origen decide la desconfianza, así que no lo pone el navegador por
-  // capricho: quien llama tiene que declararlo, y sólo hay dos.
-  origen: z.enum(['voz', 'texto']).default('texto'),
+  // El origen NO lo declara quien llama: se deduce de si el texto viene
+  // firmado por el transcriptor. Decir "texto" sobre algo que se dictó
+  // saltaría la confirmación que la política le exige a una transcripción.
+  boleta: z.string().max(300).optional(),
   canal: z.enum(['web', 'telegram']).default('web'),
 })
 
@@ -164,8 +171,40 @@ export function registrarApi(app: FastifyInstance, d: DepsApi): void {
     }))
 
     // ── el canal de instrucciones ──────────────────────────────
+
+    /**
+     * Audio crudo en el cuerpo: el navegador manda el Blob del
+     * MediaRecorder tal cual, sin multipart ni nada que empaquetar.
+     *
+     * Devuelve la transcripción firmada y NO ejecuta nada: él ve primero
+     * qué se entendió. Sólo entonces manda la orden con su boleta.
+     */
+    api.post('/transcribir', async (req, res) => {
+      if (!d.transcriptor) {
+        return res.code(503).send({ error: 'La asistente todavía no sabe oír' })
+      }
+      const datos = req.body
+      if (!Buffer.isBuffer(datos) || datos.length === 0) {
+        return res.code(400).send({ error: 'No llegó audio' })
+      }
+
+      const transcripcion = await d.transcriptor.transcribir({
+        datos,
+        tipo: String(req.headers['content-type'] ?? 'audio/webm'),
+      })
+
+      return {
+        ...transcripcion,
+        boleta: firmarVoz(transcripcion.texto, d.secretoVoz, Date.now()),
+      }
+    })
+
     api.post('/instruccion', async (req) => {
-      const { texto, origen, canal } = Instruccion.parse(req.body)
+      const { texto, boleta, canal } = Instruccion.parse(req.body)
+      // Si el texto no es exactamente el que salió del transcriptor, la
+      // firma no cuadra y deja de ser voz. Corregir a mano una palabra lo
+      // vuelve texto escrito, que es justo lo que es.
+      const origen = esDeVoz(texto, boleta, d.secretoVoz, Date.now()) ? 'voz' : 'texto'
       return d.instruccion.atender({ texto, origen, canal })
     })
 

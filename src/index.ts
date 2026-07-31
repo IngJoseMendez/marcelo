@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import { createHmac } from 'node:crypto'
 import cron from 'node-cron'
 import pino from 'pino'
 import { cargarConfig, fuentesConfiguradas } from './config.ts'
@@ -11,6 +12,7 @@ import { FuenteOutlook } from './adaptadores/outlook.ts'
 import { CalendarioGoogle } from './adaptadores/google-calendar.ts'
 import { CalendarioSombra } from './adaptadores/calendario-sombra.ts'
 import { ProveedorGroq } from './adaptadores/groq.ts'
+import { TranscriptorGroq } from './adaptadores/groq-whisper.ts'
 import { crearRepoCompromisos } from './repos/compromisos.ts'
 import { crearRepoCorreos, crearRepoCuentas } from './repos/correos.ts'
 import { crearRepoAcciones } from './repos/acciones.ts'
@@ -209,6 +211,15 @@ const app = crearServidor({
     }),
     deshacer,
     instruccion,
+    transcriptor: config.groq.modeloTranscriptor
+      ? new TranscriptorGroq(
+          config.groq.apiKey, config.groq.baseUrl,
+          config.groq.modeloTranscriptor, config.ffmpeg)
+      : undefined,
+    // Derivado del token de servicio: no hace falta otro secreto que
+    // alguien tenga que acordarse de poner.
+    secretoVoz: createHmac('sha256', config.api.token || 'sin-token')
+      .update('firma-de-voz').digest('hex'),
     repoIntenciones,
     repoCompromisos,
   },

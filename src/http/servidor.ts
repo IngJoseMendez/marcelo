@@ -12,8 +12,19 @@ export interface DepsServidor {
   api?: DepsApi
 }
 
+/** Lo que puede mandar el MediaRecorder de un navegador. */
+const TIPOS_AUDIO = [
+  'audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg',
+  'audio/wav', 'audio/x-wav', 'application/octet-stream',
+]
+
 export function crearServidor(d: DepsServidor) {
-  const app = Fastify({ logger: false })
+  const app = Fastify({ logger: false, bodyLimit: 12 * 1024 * 1024 })
+
+  // El audio llega crudo en el cuerpo: sin multipart, el navegador manda el
+  // Blob tal cual y aquí sólo hay que no tocarlo.
+  app.addContentTypeParser(TIPOS_AUDIO, { parseAs: 'buffer' },
+    (_req, cuerpo, hecho) => { hecho(null, cuerpo) })
 
   // Un cuerpo mal formado es culpa de quien llama, no un fallo del servicio.
   app.setErrorHandler((error: Error & { statusCode?: number }, _req, res) => {

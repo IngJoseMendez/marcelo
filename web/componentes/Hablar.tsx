@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ResultadoOrden, RespuestaInstruccion } from '@/lib/tipos'
 
@@ -10,14 +10,31 @@ const SUGERENCIAS = [
   'Cancélame el gimnasio del viernes',
 ]
 
+/** Lo que el navegador de turno sepa grabar. Chrome webm, Safari mp4. */
+const TIPOS = [
+  'audio/webm;codecs=opus',
+  'audio/webm',
+  'audio/mp4',
+  'audio/ogg;codecs=opus',
+]
+
+const BARRAS = 15
+
+interface Oido {
+  texto: string
+  confianza: 'alta' | 'media' | 'baja'
+  boleta: string
+}
+
 /**
  * La lámina de hablarle: el canal de instrucciones, con la misma boca que
  * Telegram.
  *
- * Lo que ella entendió se enseña SIEMPRE, haya actuado o no. Y cuando la
- * orden viene de una transcripción y toca algo que ya está en el calendario,
- * no se hace hasta que él confirme: un toque, y de paso verifica que la
- * transcripción no cambió «mañana» por «semana».
+ * Al soltar el micrófono muestra la transcripción ANTES de ejecutar nada,
+ * para que él vea qué se entendió. Y si la orden toca algo que ya está en
+ * el calendario, todavía pide confirmación: una transcripción puede cambiar
+ * «mañana» por «semana», y ahí el riesgo no es perder algo irrecuperable,
+ * es tocar el evento equivocado.
  */
 export function Hablar({
   abierta,
@@ -32,20 +49,51 @@ export function Hablar({
 }) {
   const router = useRouter()
   const campo = useRef<HTMLInputElement>(null)
+  const onda = useRef<HTMLSpanElement>(null)
+  const grabadora = useRef<MediaRecorder | null>(null)
+  const pista = useRef<MediaStream | null>(null)
+  const audio = useRef<AudioContext | null>(null)
+  const cuadro = useRef<number | null>(null)
+
   const [texto, setTexto] = useState(textoInicial)
+  const [oido, setOido] = useState<Oido | null>(null)
   const [resultados, setResultados] = useState<ResultadoOrden[] | null>(null)
-  const [pensando, setPensando] = useState(false)
+  const [estado, setEstado] = useState<'idle' | 'grabando' | 'oyendo' | 'pensando'>('idle')
   const [ocupado, setOcupado] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [puedeGrabar, setPuedeGrabar] = useState(false)
+
+  useEffect(() => {
+    setPuedeGrabar(
+      typeof window !== 'undefined'
+      && typeof window.MediaRecorder !== 'undefined'
+      && Boolean(navigator.mediaDevices?.getUserMedia))
+  }, [])
+
+  const soltarMicro = useCallback(() => {
+    if (cuadro.current !== null) cancelAnimationFrame(cuadro.current)
+    cuadro.current = null
+    pista.current?.getTracks().forEach((t) => t.stop())
+    pista.current = null
+    void audio.current?.close()
+    audio.current = null
+    // Las barras vuelven a su reposo: dejarlas congeladas parece que sigue oyendo.
+    onda.current?.querySelectorAll('span').forEach((b) => {
+      b.style.setProperty('--h', '0.18')
+    })
+  }, [])
 
   useEffect(() => {
     if (!abierta) return
     setTexto(textoInicial)
     setResultados(null)
+    setOido(null)
     setError(null)
     const t = window.setTimeout(() => campo.current?.focus(), 340)
     return () => window.clearTimeout(t)
   }, [abierta, textoInicial])
+
+  useEffect(() => () => soltarMicro(), [soltarMicro])
 
   useEffect(() => {
     if (!abierta) return
@@ -54,18 +102,112 @@ export function Hablar({
     return () => window.removeEventListener('keydown', alTeclear)
   }, [abierta, alCerrar])
 
+  // ── el micrófono ─────────────────────────────────────────────
+
+  function medirNivel(fuente: MediaStream) {
+    const contexto = new AudioContext()
+    audio.current = contexto
+    const analizador = contexto.createAnalyser()
+    analizador.fftSize = 64
+    contexto.createMediaStreamSource(fuente).connect(analizador)
+    const datos = new Uint8Array(analizador.frequencyBinCount)
+
+    const pintar = () => {
+      analizador.getByteFrequencyData(datos)
+      const barras = onda.current?.querySelectorAll('span')
+      if (barras) {
+        const porBarra = Math.max(1, Math.floor(datos.length / BARRAS))
+        barras.forEach((barra, i) => {
+          let suma = 0
+          for (let j = 0; j < porBarra; j++) suma += datos[i * porBarra + j] ?? 0
+          const nivel = suma / porBarra / 255
+          barra.style.setProperty('--h', String(Math.max(0.18, Math.min(1, nivel * 2.2))))
+        })
+      }
+      cuadro.current = requestAnimationFrame(pintar)
+    }
+    cuadro.current = requestAnimationFrame(pintar)
+  }
+
+  async function empezar() {
+    if (estado !== 'idle' || !puedeGrabar) return
+    setError(null)
+    try {
+      const fuente = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      })
+      pista.current = fuente
+      const tipo = TIPOS.find((t) => MediaRecorder.isTypeSupported(t))
+      const grabador = new MediaRecorder(fuente, tipo ? { mimeType: tipo } : undefined)
+      const trozos: Blob[] = []
+      grabador.ondataavailable = (e) => { if (e.data.size > 0) trozos.push(e.data) }
+      grabador.onstop = () => {
+        soltarMicro()
+        void transcribir(new Blob(trozos, { type: grabador.mimeType || 'audio/webm' }))
+      }
+      grabadora.current = grabador
+      grabador.start()
+      medirNivel(fuente)
+      setEstado('grabando')
+    } catch {
+      soltarMicro()
+      setEstado('idle')
+      setError('No pude usar el micrófono. Revisa el permiso del navegador.')
+    }
+  }
+
+  function terminar() {
+    if (estado !== 'grabando') return
+    setEstado('oyendo')
+    grabadora.current?.stop()
+    grabadora.current = null
+  }
+
+  async function transcribir(nota: Blob) {
+    if (nota.size < 1200) {
+      setEstado('idle')
+      setError('Muy corto. Mantén pulsado mientras hablas.')
+      return
+    }
+    try {
+      const r = await fetch('/api/transcribir', {
+        method: 'POST',
+        headers: { 'content-type': nota.type || 'audio/webm' },
+        body: nota,
+      })
+      const datos = (await r.json().catch(() => ({}))) as Partial<Oido> & { error?: string }
+      if (!r.ok || !datos.texto) {
+        setError(datos.error ?? 'No entendí el audio')
+        return
+      }
+      setOido(datos as Oido)
+      setTexto(datos.texto)
+      setResultados(null)
+      campo.current?.focus()
+    } catch {
+      setError('No se pudo llegar a la asistente')
+    } finally {
+      setEstado('idle')
+    }
+  }
+
+  // ── mandar la orden ──────────────────────────────────────────
+
   async function enviar(e: React.FormEvent) {
     e.preventDefault()
     const orden = texto.trim()
-    if (!orden || pensando) return
+    if (!orden || estado === 'pensando') return
 
-    setPensando(true)
+    setEstado('pensando')
     setError(null)
     try {
       const r = await fetch('/api/instruccion', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ texto: orden }),
+        // La boleta viaja tal cual: si él corrigió una palabra, la firma ya
+        // no cuadra y la asistente lo trata como texto escrito, que es
+        // exactamente lo que pasó a ser.
+        body: JSON.stringify({ texto: orden, boleta: oido?.boleta }),
       })
       const datos = (await r.json().catch(() => ({}))) as
         Partial<RespuestaInstruccion> & { error?: string }
@@ -77,13 +219,12 @@ export function Hablar({
 
       setResultados(datos.resultados)
       setTexto('')
-      // Algo pudo cambiar en la agenda o en la bandeja: que las pantallas
-      // de atrás no se queden contando el día anterior.
+      setOido(null)
       if (datos.resultados.some((o) => o.estado === 'hecho')) router.refresh()
     } catch {
       setError('No se pudo llegar a la asistente')
     } finally {
-      setPensando(false)
+      setEstado('idle')
     }
   }
 
@@ -113,8 +254,7 @@ export function Hablar({
 
   return (
     <section
-      className="hoja" data-abierto={abierta ? 'true' : 'false'}
-      data-estado={pensando ? 'pensando' : hayRespuesta ? 'listo' : 'idle'}
+      className="hoja" data-abierto={abierta ? 'true' : 'false'} data-estado={estado}
       role="dialog" aria-modal="true" aria-label="Hablarle a la asistente"
       aria-hidden={abierta ? undefined : true}
     >
@@ -151,7 +291,7 @@ export function Hablar({
                   </div>
                 </>
               )}
-              {o.estado !== 'confirma' && o.entendido && o.estado !== 'nada' && (
+              {o.estado !== 'confirma' && o.estado !== 'nada' && o.entendido && (
                 <p className="entendido__nota">Entendí: {o.entendido}</p>
               )}
             </div>
@@ -171,12 +311,23 @@ export function Hablar({
           {SUGERENCIAS.map((s) => (
             <button
               key={s} className="sugerencia" type="button"
-              onClick={() => { setTexto(s); campo.current?.focus() }}
+              onClick={() => { setTexto(s); setOido(null); campo.current?.focus() }}
             >
               {s}
             </button>
           ))}
         </div>
+      )}
+
+      {oido && (
+        <p className="oido" data-confianza={oido.confianza}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 8.5a8 8 0 0 1 16 0M7.5 12a4.5 4.5 0 0 1 9 0M12 12v5.5" /></svg>
+          <span>
+            {oido.confianza === 'baja'
+              ? 'No te oí del todo bien. Léelo antes de mandarlo.'
+              : 'Esto oí. Corrígelo si hace falta y dale a Decir.'}
+          </span>
+        </p>
       )}
 
       <form className="compositor" onSubmit={enviar}>
@@ -186,17 +337,45 @@ export function Hablar({
           placeholder="Dile qué hacer…" autoComplete="off"
           aria-label="Escríbele a la asistente"
         />
-        <button className="enviar" type="submit" disabled={pensando || !texto.trim()}>
-          {pensando ? 'Pensando…' : 'Decir'}
+        <button
+          className="enviar" type="submit"
+          disabled={estado === 'pensando' || !texto.trim()}
+        >
+          {estado === 'pensando' ? 'Pensando…' : 'Decir'}
         </button>
       </form>
 
       {error && <p className="entrar__error" style={{ marginBottom: 12 }}>{error}</p>}
 
-      <div className="pulsar">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="2.8" width="6" height="11" rx="3" /><path d="M5.4 11.4a6.6 6.6 0 0 0 13.2 0" /><path d="M12 18v3.2" /></svg>
-        Hablarle con la voz llega con el transcriptor
-      </div>
+      <button
+        className="pulsar" type="button" disabled={!puedeGrabar || estado === 'pensando'}
+        onPointerDown={(e) => { e.preventDefault(); void empezar() }}
+        onPointerUp={terminar}
+        onPointerCancel={terminar}
+        onPointerLeave={terminar}
+        onKeyDown={(e) => {
+          if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); void empezar() }
+        }}
+        onKeyUp={(e) => {
+          if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); terminar() }
+        }}
+      >
+        {estado === 'grabando' ? (
+          <>
+            <span className="onda" ref={onda} aria-hidden="true">
+              {Array.from({ length: BARRAS }, (_, i) => <span key={i} />)}
+            </span>
+            Suelta para terminar
+          </>
+        ) : estado === 'oyendo' ? (
+          'Oyéndote…'
+        ) : (
+          <>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="2.8" width="6" height="11" rx="3" /><path d="M5.4 11.4a6.6 6.6 0 0 0 13.2 0" /><path d="M12 18v3.2" /></svg>
+            {puedeGrabar ? 'Mantén para hablar' : 'Este navegador no graba audio'}
+          </>
+        )}
+      </button>
     </section>
   )
 }

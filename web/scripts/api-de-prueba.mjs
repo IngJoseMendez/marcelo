@@ -226,6 +226,21 @@ createServer((req, res) => {
       estado.cerradas.add(Number(cerrar[1]))
       return responder(res, 200, { ok: true })
     }
+    // El transcriptor de mentira: se traga el audio y devuelve algo fijo.
+    if (ruta === '/transcribir') {
+      let bytes = 0
+      req.on('data', (t) => { bytes += t.length })
+      req.on('end', () => {
+        responder(res, 200, {
+          texto: 'cancélame el gimnasio del viernes',
+          confianza: bytes > 20_000 ? 'alta' : 'baja',
+          segmentos: [{ texto: 'cancélame el gimnasio del viernes', confianza: 'alta' }],
+          boleta: 'de-mentira',
+        })
+      })
+      return
+    }
+
     if (ruta === '/instruccion') {
       let cuerpo = ''
       req.on('data', (t) => { cuerpo += t })

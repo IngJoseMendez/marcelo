@@ -21,7 +21,8 @@ export function baseConfigurada(): boolean {
 
 export async function pedir<T>(
   ruta: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  limiteMs = TIEMPO_LIMITE
 ): Promise<Respuesta<T>> {
   const base = process.env.API_BASE
   const token = process.env.API_TOKEN
@@ -41,7 +42,7 @@ export async function pedir<T>(
       cache: 'no-store',
       // Con la laptop apagada, esto se queda colgado para siempre. Ocho
       // segundos y la app dice "sin conexión", que es una respuesta.
-      signal: AbortSignal.timeout(TIEMPO_LIMITE),
+      signal: AbortSignal.timeout(limiteMs),
     })
 
     if (!r.ok) {
@@ -70,3 +71,16 @@ export const enviar = <T>(ruta: string, cuerpo?: unknown): Promise<Respuesta<T>>
     method: 'POST',
     body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
   })
+
+/**
+ * El audio va crudo, con su propio content-type. Transcribir tarda más que
+ * leer una agenda, así que se le da más cuerda antes de darlo por perdido.
+ */
+export const subirAudio = <T>(
+  ruta: string, datos: ArrayBuffer, tipo: string
+): Promise<Respuesta<T>> =>
+  pedir<T>(ruta, {
+    method: 'POST',
+    body: datos,
+    headers: { 'content-type': tipo },
+  }, 30_000)

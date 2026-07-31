@@ -8,6 +8,10 @@ const Esquema = z.object({
   GROQ_BASE_URL: z.string().default('https://api.groq.com/openai/v1'),
   GROQ_MODELO_CLASIFICADOR: z.string().default(''),
   GROQ_MODELO_EXTRACTOR: z.string().default(''),
+  GROQ_MODELO_TRANSCRIPTOR: z.string().default(''),
+  // Opcional: sube el volumen de las notas de voz antes de transcribirlas.
+  // Sin esto el audio va como llegó, y llega bajo.
+  FFMPEG_RUTA: z.string().default(''),
 
   GOOGLE_CLIENT_ID: z.string().default(''),
   GOOGLE_CLIENT_SECRET: z.string().default(''),
@@ -47,7 +51,10 @@ export function cargarConfig(env: Record<string, string | undefined>) {
       baseUrl: v.GROQ_BASE_URL,
       modeloClasificador: v.GROQ_MODELO_CLASIFICADOR,
       modeloExtractor: v.GROQ_MODELO_EXTRACTOR,
+      modeloTranscriptor: v.GROQ_MODELO_TRANSCRIPTOR,
     },
+
+    ffmpeg: v.FFMPEG_RUTA,
 
     google: {
       clientId: v.GOOGLE_CLIENT_ID,

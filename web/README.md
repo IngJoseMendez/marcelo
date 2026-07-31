@@ -80,19 +80,24 @@ llamada a herramienta acotada** —consultar la agenda, cancelar, mover, anotar
 un pendiente, enseñar un compromiso, deshacer, poner una regla— y de ahí en
 adelante decide y actúa el mismo código que atiende los correos.
 
-Dos cosas que se ven en la pantalla:
+Mantén pulsado el micrófono y habla: mientras grabas ves el nivel del audio,
+y al soltar **aparece la transcripción en el campo antes de ejecutar nada**.
+Si no te oyó bien, lo dice en ámbar para que lo leas antes de mandarlo.
+
+Tres cosas que se ven en la pantalla:
 
 - **Siempre enseña lo que entendió**, haya actuado o no.
 - **Lo que venga de una transcripción y toque algo que ya está en el
   calendario, se confirma antes.** Un toque, y de paso verificas que no oyó
   «semana» donde dijiste «mañana». Esa confirmación también aparece en la
   Crónica, así que si cierras la lámina no se pierde.
+- **Si corriges una palabra de la transcripción, deja de ser voz.** La
+  asistente firma lo que transcribe; cambiarlo invalida la firma y pasa a ser
+  texto tuyo, que es justo lo que es. El origen no es un campo que mande el
+  navegador.
 
 ## Lo que todavía no hace
 
-- **Oírte.** El intérprete ya está; falta el transcriptor (Groq Whisper) y la
-  ruta que sube el audio. Por eso el micrófono está apagado: lo que escribas
-  ya funciona igual que lo que dictarás.
 - **Tesoro con datos.** La asistente todavía no lleva libro contable, y la
   pantalla no inventa cifras: en cuentas, mentir en silencio es la peor forma
   de fallar.
