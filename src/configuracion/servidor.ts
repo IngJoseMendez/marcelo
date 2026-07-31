@@ -254,6 +254,47 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
 
   // ── probar cada pieza ───────────────────────────────────────
 
+  /**
+   * Levantar el contenedor de Postgres.
+   *
+   * Antes esto era «abre una terminal y corre docker compose up -d», que es
+   * pedirle a alguien que no programa justo lo único que no sabe hacer.
+   */
+  app.post('/api/base/levantar', async () => {
+    const arriba = await correr('docker', ['info'])
+    if (!arriba.ok) {
+      return {
+        ok: false,
+        mensaje: 'Docker Desktop no está corriendo. Ábrelo con el botón de arriba, '
+          + 'espera a que la ballena deje de moverse, y vuelve.',
+      }
+    }
+
+    const r = await correr('docker', ['compose', 'up', '-d', 'db'])
+    if (!r.ok) {
+      return { ok: false, mensaje: `Docker no pudo: ${r.salida.trim().slice(0, 250)}` }
+    }
+    return {
+      ok: true,
+      mensaje: 'Base de datos levantada. Dale a Probar conexión.',
+      avisos: ['Queda encendida sola cada vez que arranque Docker.'],
+    }
+  })
+
+  /** Docker instalado pero cerrado es el caso más común de todos. */
+  app.post('/api/base/abrir-docker', async () => {
+    if (plataforma !== 'windows') {
+      return { ok: false, mensaje: 'Ábrelo tú desde tus aplicaciones.' }
+    }
+    spawn('cmd', ['/c', 'start', '', '"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"'],
+      { shell: false, detached: true, stdio: 'ignore' }).unref()
+    return {
+      ok: true,
+      mensaje: 'Abriendo Docker Desktop. Tarda como un minuto en estar listo: '
+        + 'espera a que el icono de la ballena deje de moverse.',
+    }
+  })
+
   app.post('/api/probar/base', async (req) => {
     const { DATABASE_URL = '' } = (req.body ?? {}) as Record<string, string>
     const r = await probarBase(DATABASE_URL, async (url) => {

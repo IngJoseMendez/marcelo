@@ -176,6 +176,17 @@ details.tecnico[open] > summary { border-bottom:1px solid var(--borde); }
 details.tecnico > label:first-of-type { margin-top:10px; }
 details.tecnico > input:last-child { margin-bottom:16px; }
 
+ul.lista { margin:10px 0 0; padding:0; list-style:none; }
+ul.lista > li {
+  position:relative; padding:0 0 12px 20px; color:var(--tinta-suave); font-size:15px;
+}
+ul.lista > li::before {
+  content:''; position:absolute; left:4px; top:11px;
+  width:5px; height:5px; border-radius:99px; background:var(--lumen);
+}
+ul.lista b { color:var(--tinta); }
+h3.ojal { font-size:12px; }
+
 .requisito {
   display:flex; align-items:flex-start; gap:14px; padding:14px 0;
   border-bottom:1px solid var(--borde);
@@ -484,14 +495,18 @@ la máquina se reinicia de madrugada y se queda pidiendo contraseña, nada arran
 hasta que alguien vaya y la escriba.</p>`)
 
   const base = bloque('base', 'Base de datos', `
-<p class="sub">Postgres corre en Docker, en esta misma laptop. Si ya levantaste
-<code class="mono">docker compose up -d</code>, esto es sólo darle a Probar.</p>
+<p class="sub">Aquí se guarda todo lo que ella aprende: tus compromisos, lo que hizo
+y por qué. Corre dentro de Docker, en esta misma laptop — no sale a internet.</p>
 <ol class="pasos">
-  <li>Abre una terminal en la carpeta del proyecto.</li>
-  <li>Corre <code class="mono">docker compose up -d</code> y espera unos segundos.</li>
-  <li>Dale a <b>Probar conexión</b>. Las tablas se crean solas.</li>
+  <li>Si Docker Desktop está cerrado, <b>ábrelo</b> con el botón. Tarda como un
+    minuto: espera a que el icono de la ballena deje de moverse.</li>
+  <li><b>Levantar la base de datos.</b> Lo hago yo, no tienes que abrir ninguna
+    terminal.</li>
+  <li><b>Probar conexión.</b> Las tablas se crean solas la primera vez.</li>
 </ol>
-<label for="DATABASE_URL">Cadena de conexión</label>
+<button class="accion suave" data-ruta="/api/base/abrir-docker" data-esperando="abriendo…">Abrir Docker Desktop</button>
+<button class="accion" data-ruta="/api/base/levantar" data-esperando="levantando…">Levantar la base de datos</button>
+<label for="DATABASE_URL">Dónde vive (esto ya viene puesto, no lo toques)</label>
 <input type="text" id="DATABASE_URL" name="DATABASE_URL" class="mono"
   value="${esc(d.urlPropuestaBase)}" spellcheck="false">
 <button class="accion" data-ruta="/api/probar/base" data-esperando="probando…">Probar conexión</button>`)
@@ -721,6 +736,69 @@ esta clave se fue con él, los respaldos cifrados no sirven de nada.</p>
       <button class="accion" type="submit">Arrancar la asistente</button>
     </form>
   </div>
+
+  <section class="bloque" data-bloque="manual" data-salud="listo">
+    <button class="cabeza" type="button">
+      <span class="punto"></span>
+      <span class="titulo">Cómo vivir con esto</span>
+      <span class="detalle">léelo una vez</span>
+      <span class="flecha">›</span>
+    </button>
+    <div class="cuerpo">
+      <p class="sub">Esta laptop pasa a ser un servidor. No es una forma de hablar:
+      hay cosas que dejan de poderse hacer con ella, y conviene saberlas antes que
+      descubrirlas.</p>
+
+      <h3 class="ojal" style="margin-top:22px">Lo que no se puede hacer</h3>
+      <ul class="lista">
+        <li><b>No la apagues.</b> Apagada no lee correo, no contesta por Telegram, no
+          manda el resumen de las 9 y no hace el respaldo. Nada se pierde para
+          siempre —al encenderla se pone al día— pero mientras está apagada, no está.</li>
+        <li><b>No cierres la ventana negra.</b> Ahí vive. Minimizarla no pasa nada;
+          cerrarla la apaga.</li>
+        <li><b>No la uses como computador personal.</b> Un juego o un editor de video
+          se comen la memoria y la vuelven lenta. Para eso está tu otro equipo.</li>
+        <li><b>Nunca corras <code class="mono">docker compose down -v</code>.</b> Esa
+          <code class="mono">-v</code> borra la base de datos entera. Sin ella el
+          comando es inofensivo.</li>
+      </ul>
+
+      <h3 class="ojal" style="margin-top:22px">Lo que sí puede pasar sin drama</h3>
+      <ul class="lista">
+        <li><b>Bloquear la pantalla.</b> Bloqueada sigue trabajando igual.</li>
+        <li><b>Cerrar la tapa</b>, si le diste al botón de no dormir. Puedes dejarla
+          cerrada en un rincón.</li>
+        <li><b>Que se vaya la luz.</b> La batería es su UPS: aguanta el rato que
+          aguante, y al volver la corriente sigue como si nada.</li>
+        <li><b>Que se caiga el internet.</b> Al volver se pone al día sola y no
+          duplica nada.</li>
+        <li><b>Que Windows se reinicie de madrugada.</b> Vuelve sola, si registraste
+          el arranque automático.</li>
+      </ul>
+
+      <h3 class="ojal" style="margin-top:22px">Lo que hay que mirar de vez en cuando</h3>
+      <ul class="lista">
+        <li><b>Que llegue el respaldo por Telegram</b> de madrugada. Si un día no
+          llega, algo se rompió — y de eso uno se entera el día que lo necesita.</li>
+        <li><b>Que la batería no viva al 100 %.</b> Si tu portátil deja limitar la
+          carga al 80 %, hazlo: enchufada años al 100 % la batería se hincha.</li>
+        <li><b>Ponla donde respire.</b> Cerrada y encima de una cama se cocina.
+          Una mesa dura y con aire.</li>
+      </ul>
+
+      <h3 class="ojal" style="margin-top:22px">Si algo se ve raro</h3>
+      <ul class="lista">
+        <li>La app dice <b>«sin conexión»</b> → la laptop está apagada, sin internet,
+          o el túnel cambió de dirección. Con <code class="mono">npm run configurar</code>
+          se vuelve a abrir esta pantalla y se arregla desde el bloque del túnel.</li>
+        <li><b>Ella no contesta por Telegram</b> → mira que la ventana negra siga
+          abierta.</li>
+        <li><b>Hizo algo que no era</b> → botón Deshacer en el mensaje, o
+          <code class="mono">/deshacer</code>. Todo lo que hace se puede revertir, y
+          queda anotado en la Crónica con el correo que lo causó.</li>
+      </ul>
+    </div>
+  </section>
 </div>
 <script>${GUION}</script>
 </body>

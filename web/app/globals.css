@@ -909,3 +909,121 @@ button.rejilla__hueco:active { box-shadow: inset 0 0 0 1.5px var(--linea-2); col
   }
   .fila[data-quien="ella"] .fila__hilo::after { filter: none; opacity: .22; }
 }
+
+/* ── 18. escritorio ─────────────────────────────────────────────
+   Hasta aquí todo es un teléfono, y en un monitor eso se veía como un
+   teléfono flotando en el medio. De 1024 px para arriba la carcasa se
+   convierte en una app de escritorio: la barra de pestañas de abajo pasa
+   a ser una columna a la izquierda, con los nombres siempre visibles y
+   sitio para el botón de invocar.
+
+   Todo por CSS y sin tocar los componentes: el marcador deslizante de las
+   pestañas ya se mueve con una variable, así que sólo cambia de eje.
+
+   La pantalla de entrar no lleva pestañas y se queda como está —una
+   ventanita centrada—, que es lo que pide un formulario de cuatro campos.
+   Por eso la regla mira si existe el dock en vez de aplicarse a todo. */
+
+@media (min-width: 1024px) {
+  body { padding: 0; align-items: stretch; }
+
+  .app:has(.dock) {
+    max-width: 1280px;
+    height: 100dvh;
+    margin: 0 auto;
+    border-radius: 0;
+    box-shadow: none;
+    display: grid;
+    grid-template-columns: 252px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      "lado barra"
+      "lado scroll";
+  }
+
+  .app:has(.dock) .barra { grid-area: barra; padding: 20px 40px 10px; }
+  .app:has(.dock) .scroll { grid-area: scroll; padding: 4px 40px 56px; }
+  .app:has(.dock) .pulso__texto { font-size: 13px; }
+
+  /* Una columna de lectura: a 1200 px de ancho, un párrafo a línea
+     completa no se lee, se recorre con la cabeza. */
+  .app:has(.dock) .scroll > .vista { max-width: 1040px; }
+
+  /* ── el dock se pone de pie ── */
+  .dock {
+    grid-area: lado;
+    position: relative; inset: auto;
+    flex-direction: column; align-items: stretch; gap: 20px;
+    padding: 22px 16px;
+    border-right: 1px solid var(--linea);
+    overflow: hidden;
+  }
+  .dock::before {
+    content: "Mi Segundo Cerebro";
+    position: static; inset: auto;
+    display: block; padding: 4px 12px 2px;
+    font-family: var(--display);
+    font-size: 15px; font-weight: 700; letter-spacing: -.03em;
+    color: var(--tinta); background: none;
+  }
+
+  .pastilla {
+    flex: none;
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+  /* Sin hueco entre pestañas y con altura fija, para que el marcador
+     deslizante caiga justo donde debe con la misma cuenta de siempre. */
+  .pastilla__marca {
+    top: 0; left: 0; right: 0; bottom: auto;
+    width: auto; height: 46px;
+    border-radius: 14px;
+    transform: translateY(calc(var(--tab, 0) * 46px));
+  }
+  .tab {
+    flex-direction: row; justify-content: flex-start; align-items: center;
+    height: 46px; gap: 12px; padding: 0 14px; border-radius: 14px;
+  }
+  .tab:active { transform: none; }
+  .tab:hover { color: var(--tinta); }
+  .tab__nombre { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+  .tab__marca { top: 14px; right: 12px; }
+
+  /* El botón de voz deja de ser un círculo suelto y se gana su nombre. */
+  .fab {
+    order: -1;
+    width: auto; height: 46px; border-radius: 14px;
+    grid-auto-flow: column; gap: 10px; padding: 0 16px;
+    justify-content: flex-start;
+    box-shadow: var(--sombra-1);
+  }
+  .fab::after {
+    content: "Invocar";
+    font-size: 14px; font-weight: 650; letter-spacing: -.01em;
+  }
+  .fab:active { transform: none; }
+  .fab:hover { filter: brightness(1.06); }
+
+  /* ── la lámina de hablar deja de subir desde abajo ── */
+  .hoja {
+    top: 50%; bottom: auto; left: 50%; right: auto;
+    width: min(560px, calc(100vw - 80px));
+    border-radius: var(--r-l);
+    transform: translate(-50%, -46%) scale(.98);
+  }
+  .hoja[data-abierto="true"] { transform: translate(-50%, -50%); }
+  .hoja__asa { display: none; }
+
+  .tostada { bottom: 28px; }
+}
+
+/* Monitores anchos: el contenido no se estira sin límite, pero la columna
+   de la izquierda tampoco se queda flotando lejos de él. */
+@media (min-width: 1500px) {
+  .app:has(.dock) { max-width: 1440px; grid-template-columns: 276px minmax(0, 1fr); }
+  .app:has(.dock) .scroll { padding: 4px 56px 56px; }
+}
