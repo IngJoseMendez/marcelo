@@ -9,9 +9,11 @@ export interface EntradaCronica {
   tipo: string
   origen: Origen
   confianza: Confianza
-  estado: 'aplicada' | 'deshecha' | 'sombra' | 'pendiente'
+  estado: 'aplicada' | 'deshecha' | 'sombra' | 'pendiente' | 'descartada'
   creadaEn: string
   deshechaEn: string | null
+  /** Lo que entendió, tal como se lo enseñó a él. Sólo en órdenes suyas. */
+  resumen: string | null
   /** Lo hizo sola, sin que nadie se lo pidiera. */
   porElla: boolean
   /** Modo sombra: lo habría hecho, pero no tocó nada. */
@@ -28,6 +30,7 @@ interface Fila {
   origen: Origen
   confianza: Confianza
   estado: EntradaCronica['estado']
+  resumen: string | null
   creada_en: Date
   deshecha_en: Date | null
   payload_aplicado: unknown
@@ -57,7 +60,7 @@ export function crearServicioCronica(db: BaseDatos, zona = 'America/Bogota') {
   return {
     async desde(desdeIso: string, limite = 200): Promise<EntradaCronica[]> {
       const { rows } = await db.query<Fila>(
-        `SELECT a.id, a.tipo, a.origen, a.confianza, a.estado,
+        `SELECT a.id, a.tipo, a.origen, a.confianza, a.estado, a.resumen,
                 a.creada_en, a.deshecha_en, a.payload_aplicado, a.payload_inverso,
                 a.compromiso_id, c.titulo AS compromiso_titulo,
                 co.remitente, co.asunto, co.recibido_en
@@ -84,6 +87,7 @@ export function crearServicioCronica(db: BaseDatos, zona = 'America/Bogota') {
           estado: f.estado,
           creadaEn: enZona(f.creada_en)!,
           deshechaEn: enZona(f.deshecha_en),
+          resumen: f.resumen,
           porElla: f.origen === 'correo',
           ensayo: f.estado === 'sombra',
           // El título del evento vive en la inversa cuando ella lo canceló;

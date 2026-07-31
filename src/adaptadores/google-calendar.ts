@@ -84,6 +84,7 @@ export class CalendarioGoogle implements SumideroCalendario {
           summary: a.titulo,
           start: { dateTime: a.inicio, timeZone: this.tz },
           end: { dateTime: a.fin, timeZone: this.tz },
+          recurrence: a.rrule ? [`RRULE:${a.rrule}`] : undefined,
         },
       })
     } else {

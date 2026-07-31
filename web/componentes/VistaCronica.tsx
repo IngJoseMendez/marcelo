@@ -24,19 +24,20 @@ function Entrada({ entrada, hoy }: { entrada: EntradaCronica; hoy: string }) {
   const [abierto, setAbierto] = useState(false)
   const [deshaciendo, setDeshaciendo] = useState(false)
 
-  const deshecha = entrada.estado === 'deshecha'
+  const deshecha = entrada.estado === 'deshecha' || entrada.estado === 'descartada'
+  const esperando = entrada.estado === 'pendiente'
   const quien = deQuien(entrada)
 
-  async function deshacer() {
+  async function llamar(ruta: string, exito: string) {
     setDeshaciendo(true)
     try {
-      const r = await fetch(`/api/acciones/${entrada.id}/deshacer`, { method: 'POST' })
+      const r = await fetch(ruta, { method: 'POST' })
       const datos = (await r.json().catch(() => ({}))) as { motivo?: string; error?: string }
       if (!r.ok) {
-        tostar(datos.motivo ?? datos.error ?? 'No se pudo deshacer')
+        tostar(datos.motivo ?? datos.error ?? 'No se pudo')
         return
       }
-      tostar('Listo, lo devolví como estaba.')
+      tostar(exito)
       router.refresh()
     } catch {
       tostar('No se pudo llegar a la asistente')
@@ -44,6 +45,9 @@ function Entrada({ entrada, hoy }: { entrada: EntradaCronica; hoy: string }) {
       setDeshaciendo(false)
     }
   }
+
+  const deshacer = () =>
+    llamar(`/api/acciones/${entrada.id}/deshacer`, 'Listo, lo devolví como estaba.')
 
   return (
     <article className="entrada" data-anim data-deshecha={deshecha ? 'true' : 'false'}>
@@ -68,6 +72,24 @@ function Entrada({ entrada, hoy }: { entrada: EntradaCronica; hoy: string }) {
         </div>
 
         <div className="acciones">
+          {esperando && (
+            <>
+              <button
+                className="btn btn--principal" type="button" disabled={deshaciendo}
+                onClick={() => llamar(`/api/instrucciones/${entrada.id}/confirmar`,
+                  'Listo, lo hice.')}
+              >
+                Confirmar
+              </button>
+              <button
+                className="btn btn--fantasma" type="button" disabled={deshaciendo}
+                onClick={() => llamar(`/api/instrucciones/${entrada.id}/descartar`,
+                  'Bueno, no lo toqué.')}
+              >
+                No, esa no
+              </button>
+            </>
+          )}
           {entrada.correo && (
             <button
               className="btn" type="button" aria-expanded={abierto}
@@ -77,14 +99,16 @@ function Entrada({ entrada, hoy }: { entrada: EntradaCronica; hoy: string }) {
               <svg className="btn__chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: abierto ? 'rotate(180deg)' : undefined }}><path d="m6 9 6 6 6-6" /></svg>
             </button>
           )}
-          <button
-            className="btn btn--fantasma" type="button"
-            disabled={entrada.estado !== 'aplicada' || deshaciendo}
-            title={entrada.ensayo ? 'En sombra no se aplicó nada' : undefined}
-            onClick={deshacer}
-          >
-            {deshecha ? 'Deshecho' : deshaciendo ? 'Deshaciendo…' : 'Deshacer'}
-          </button>
+          {!esperando && (
+            <button
+              className="btn btn--fantasma" type="button"
+              disabled={entrada.estado !== 'aplicada' || deshaciendo}
+              title={entrada.ensayo ? 'En sombra no se aplicó nada' : undefined}
+              onClick={deshacer}
+            >
+              {deshecha ? 'Deshecho' : deshaciendo ? 'Deshaciendo…' : 'Deshacer'}
+            </button>
+          )}
         </div>
 
         {entrada.correo && (

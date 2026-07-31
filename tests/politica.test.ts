@@ -38,9 +38,21 @@ test('voz + acción destructiva -> confirma aunque la confianza sea alta', () =>
   }), 'confirmar')
 })
 
-test('voz + acción reversible -> actúa y avisa', () => {
+test('voz + mover algo que ya existe -> confirma', () => {
+  // Aunque mover se deshaga fácil, el riesgo de la voz no es perder algo
+  // irrecuperable: es mover el evento equivocado porque el transcriptor
+  // cambió una palabra. Por eso se enseña lo entendido antes de tocar.
   assert.equal(decidir({
     origen: 'voz', tipo: 'mover_evento',
+    confianza: 'alta', silenciadoPorRegla: false,
+  }), 'confirmar')
+})
+
+test('voz + agendar algo nuevo -> actúa y hace eco de lo entendido', () => {
+  // Meter una tarea en un hueco no toca nada de lo que ya había: si la
+  // transcripción falló, sobra un evento y se quita con un toque.
+  assert.equal(decidir({
+    origen: 'voz', tipo: 'crear_evento',
     confianza: 'alta', silenciadoPorRegla: false,
   }), 'actuar_y_avisar')
 })

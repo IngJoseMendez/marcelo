@@ -55,12 +55,30 @@ export interface Jornada {
   modoSombra: boolean
 }
 
+/** Una llamada a herramienta ya ejecutada, o esperando que él confirme. */
+export interface ResultadoOrden {
+  herramienta: string
+  estado: 'hecho' | 'confirma' | 'pregunta' | 'respuesta' | 'nada'
+  /** Lo que entendió, en palabras. Se devuelve siempre, incluso al fallar. */
+  entendido: string
+  respuesta: string
+  confirmaId?: number
+  accionId?: number
+  ensayo?: boolean
+}
+
+export interface RespuestaInstruccion {
+  texto: string
+  resultados: ResultadoOrden[]
+}
+
 export interface EntradaCronica {
   id: number
   tipo: string
   origen: Origen
   confianza: Confianza
-  estado: 'aplicada' | 'deshecha' | 'sombra' | 'pendiente'
+  estado: 'aplicada' | 'deshecha' | 'sombra' | 'pendiente' | 'descartada'
+  resumen: string | null
   creadaEn: string
   deshechaEn: string | null
   porElla: boolean

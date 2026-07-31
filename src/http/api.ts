@@ -10,6 +10,7 @@ import type { ServicioJornada } from '../servicios/jornada.ts'
 import type { ServicioCronica } from '../servicios/cronica.ts'
 import type { ServicioAgenda } from '../servicios/agendar.ts'
 import type { ServicioDeshacer } from '../servicios/deshacer.ts'
+import type { ServicioInstruccion } from '../servicios/instruccion.ts'
 import { DURACIONES, calcularPrioridad, redondearDuracion } from '../dominio/intenciones.ts'
 
 export interface DepsApi {
@@ -22,6 +23,7 @@ export interface DepsApi {
   cronica: ServicioCronica
   agenda: ServicioAgenda
   deshacer: ServicioDeshacer
+  instruccion: ServicioInstruccion
   repoIntenciones: RepoIntenciones
   repoCompromisos: RepoCompromisos
 }
@@ -45,6 +47,14 @@ const Agendar = z.object({
 })
 
 const Cerrar = z.object({ estado: z.enum(['hecha', 'descartada']) })
+
+const Instruccion = z.object({
+  texto: z.string().min(1).max(2000),
+  // El origen decide la desconfianza, así que no lo pone el navegador por
+  // capricho: quien llama tiene que declararlo, y sólo hay dos.
+  origen: z.enum(['voz', 'texto']).default('texto'),
+  canal: z.enum(['web', 'telegram']).default('web'),
+})
 
 /** Comparación en tiempo constante: un token no se adivina midiendo respuestas. */
 function tokenValido(recibido: string, esperado: string): boolean {
@@ -152,5 +162,21 @@ export function registrarApi(app: FastifyInstance, d: DepsApi): void {
     api.get('/pactos', async () => ({
       compromisos: await d.repoCompromisos.listarActivos(),
     }))
+
+    // ── el canal de instrucciones ──────────────────────────────
+    api.post('/instruccion', async (req) => {
+      const { texto, origen, canal } = Instruccion.parse(req.body)
+      return d.instruccion.atender({ texto, origen, canal })
+    })
+
+    api.post('/instrucciones/:id/confirmar', async (req) => {
+      const { id } = Id.parse(req.params)
+      return d.instruccion.confirmar(id)
+    })
+
+    api.post('/instrucciones/:id/descartar', async (req) => {
+      const { id } = Id.parse(req.params)
+      return d.instruccion.descartar(id)
+    })
   }, { prefix: '/api' })
 }

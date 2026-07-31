@@ -16,10 +16,13 @@ import { crearRepoCorreos, crearRepoCuentas } from './repos/correos.ts'
 import { crearRepoAcciones } from './repos/acciones.ts'
 import { crearRepoCola } from './repos/cola.ts'
 import { crearRepoIntenciones } from './repos/intenciones.ts'
+import { crearRepoReglas } from './repos/reglas.ts'
+import { crearInterprete } from './pipeline/interprete.ts'
 import { crearServicioJornada } from './servicios/jornada.ts'
 import { crearServicioCronica } from './servicios/cronica.ts'
 import { crearServicioAgenda } from './servicios/agendar.ts'
 import { crearServicioDeshacer } from './servicios/deshacer.ts'
+import { crearServicioInstruccion } from './servicios/instruccion.ts'
 import { crearClasificador } from './pipeline/clasificador.ts'
 import { crearExtractor } from './pipeline/extractor.ts'
 import { crearDesempate } from './pipeline/desempate.ts'
@@ -90,6 +93,23 @@ const reloj = new RelojReal(config.zonaHoraria)
 const repoCompromisos = crearRepoCompromisos(db)
 const repoAcciones = crearRepoAcciones(db)
 const repoIntenciones = crearRepoIntenciones(db)
+const repoReglas = crearRepoReglas(db)
+
+// Las reglas que él dicta ("de Bancolombia no me avises") viven en la base y
+// se releen en cada tanda: el procesador lee estos arreglos en cada correo,
+// así que actualizarlos en sitio hace que una regla nueva valga sin
+// reiniciar el servicio.
+const remitentesIgnorados: string[] = []
+const remitentesSilenciados: string[] = []
+
+async function recargarReglas(): Promise<void> {
+  const [ignorar, silenciar] = await Promise.all([
+    repoReglas.porTipo('ignorar_remitente'),
+    repoReglas.porTipo('silenciar_remitente'),
+  ])
+  remitentesIgnorados.splice(0, remitentesIgnorados.length, ...ignorar)
+  remitentesSilenciados.splice(0, remitentesSilenciados.length, ...silenciar)
+}
 
 const procesador = crearProcesador({
   reloj,
@@ -100,14 +120,15 @@ const procesador = crearProcesador({
   extractor: crearExtractor(llm, config.groq.modeloExtractor),
   desempate: crearDesempate(llm, config.groq.modeloExtractor),
   calendario,
-  remitentesIgnorados: [],
-  remitentesSilenciados: [],
+  remitentesIgnorados,
+  remitentesSilenciados,
 })
 
 const sync = crearSincronizacion(db, cola)
 const porCuenta = new Map(conectadas.map((c) => [c.cuentaId, c]))
 
 async function drenarCola(): Promise<void> {
+  await recargarReglas()
   for (const item of await cola.tomarPendientes(10)) {
     const cuenta = porCuenta.get(item.cuentaId)
     if (!cuenta) {
@@ -153,6 +174,24 @@ const jornada = crearServicioJornada({
   hasta: config.jornada.hasta,
 })
 
+const deshacer = crearServicioDeshacer(repoAcciones, calendario, repoIntenciones)
+
+// El canal de instrucciones: el LLM entiende, y de ahí en adelante decide y
+// actúa el mismo código que atiende los correos.
+const instruccion = crearServicioInstruccion({
+  reloj,
+  interprete: crearInterprete(llm, config.groq.modeloExtractor),
+  desempate: crearDesempate(llm, config.groq.modeloExtractor),
+  calendario,
+  repoCompromisos,
+  repoAcciones,
+  repoIntenciones,
+  repoReglas,
+  jornada,
+  deshacer,
+  calendarId: config.google.calendarId,
+})
+
 const app = crearServidor({
   db,
   modoSombra: config.modoSombra,
@@ -168,7 +207,8 @@ const app = crearServidor({
       reloj, calendario, repoAcciones, repoIntenciones,
       calendarId: config.google.calendarId,
     }),
-    deshacer: crearServicioDeshacer(repoAcciones, calendario, repoIntenciones),
+    deshacer,
+    instruccion,
     repoIntenciones,
     repoCompromisos,
   },

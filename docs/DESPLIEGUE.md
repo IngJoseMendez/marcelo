@@ -217,7 +217,7 @@ npm run dev                          # con API_BASE=http://localhost:4000
 
 ## 4. Verificar que quedó bien
 
-- [ ] `npm test` pasa completo (170 pruebas)
+- [ ] `npm test` pasa completo (188 pruebas)
 - [ ] `curl https://api.tudominio.com/salud` responde desde fuera de la casa
 - [ ] `curl -H "Authorization: Bearer $API_TOKEN" https://api.tudominio.com/api/jornada`
       devuelve el día — y sin la cabecera responde 401

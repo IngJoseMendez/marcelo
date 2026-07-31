@@ -92,10 +92,17 @@ const cronica = () => ({
   ahora: ahora(),
   desde: `${hoy()}T00:00:00-05:00`,
   entradas: [
+    // Una orden hablada esperando que él confirme.
+    { id: 77, tipo: 'cancelar_instancia', origen: 'voz', confianza: 'alta',
+      estado: estado.deshechas.has(11) ? 'aplicada' : 'pendiente',
+      creadaEn: haceHoras(0.2), deshechaEn: null, porElla: false, ensayo: false,
+      titulo: 'Gimnasio', resumen: 'cancelar «Gimnasio» el viernes 7 de agosto',
+      objetivo: { inicio: en(7), fin: en(8, 15), desdeInicio: null },
+      compromiso: { id: 3, titulo: 'Gimnasio' }, correo: null },
     { id: 12, tipo: 'mover_evento', origen: 'correo', confianza: 'media',
       estado: estado.deshechas.has(12) ? 'deshecha' : 'aplicada',
       creadaEn: haceHoras(6), deshechaEn: null, porElla: true, ensayo: false,
-      titulo: 'Grupo de estudio',
+      titulo: 'Grupo de estudio', resumen: null,
       objetivo: { inicio: en(16), fin: en(18), desdeInicio: en(15) },
       compromiso: { id: 4, titulo: 'Grupo de estudio' },
       correo: { remitente: 'andres.m@uni.edu.co', asunto: 'Nos corremos una hora',
@@ -103,7 +110,7 @@ const cronica = () => ({
     { id: 11, tipo: 'cancelar_instancia', origen: 'correo', confianza: 'alta',
       estado: estado.deshechas.has(11) ? 'deshecha' : 'aplicada',
       creadaEn: haceHoras(7), deshechaEn: null, porElla: true, ensayo: false,
-      titulo: 'Cálculo',
+      titulo: 'Cálculo', resumen: null,
       objetivo: { inicio: en(16), fin: en(17), desdeInicio: null },
       compromiso: { id: 1, titulo: 'Cálculo' },
       correo: { remitente: 'ramirez@uni.edu.co', asunto: 'Clase de hoy',
@@ -127,6 +134,53 @@ const pactos = () => ({
       remitentesVinculados: [], activo: true },
   ],
 })
+
+/**
+ * El intérprete de mentira: empareja palabras sueltas.
+ *
+ * Divergencia deliberada del backend real: aquí una cancelación SIEMPRE
+ * pide confirmación, aunque venga escrita, para poder revisar ese flujo sin
+ * tener el transcriptor. En la asistente de verdad sólo confirma lo que
+ * llega por voz.
+ */
+function interpretar(texto) {
+  // Sin tildes: "cancélame" tiene que emparejar con "cancel".
+  const t = texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+
+  if (t.includes('cancel') || t.includes('quita')) {
+    return [{
+      herramienta: 'cancelar', estado: 'confirma',
+      entendido: 'cancelar «Gimnasio» el viernes 7 de agosto',
+      respuesta: 'Entendí: cancelar «Gimnasio» el viernes 7 de agosto. ¿Lo hago?',
+      confirmaId: 77,
+    }]
+  }
+  if (t.includes('que') || t.includes('?')) {
+    return [{
+      herramienta: 'consultar_agenda', estado: 'respuesta',
+      entendido: 'qué tienes hoy',
+      respuesta: 'Te queda hoy: 16:00 Grupo de estudio · 20:00 Estudiar para el parcial. Tienes 2 h libres entre las 18:00 y las 20:00.',
+    }]
+  }
+  if (t.includes('anot') || t.includes('recuérdame') || t.includes('acuérdate')) {
+    const titulo = texto.replace(/^.*?(an[oó]tame|an[oó]ta|recu[eé]rdame)\s*/i, '')
+    const id = intenciones.length + 1
+    intenciones.push({
+      id, titulo: titulo || texto, detalle: null, prioridad: 'normal',
+      duracionMin: 30, venceEl: null, estado: 'pendiente', origen: 'texto',
+      googleEventId: null,
+    })
+    return [{
+      herramienta: 'anotar_pendiente', estado: 'hecho',
+      entendido: `anotar «${titulo || texto}»`,
+      respuesta: `Anotado: «${titulo || texto}» (30 min, normal).`,
+    }]
+  }
+  return [{
+    herramienta: 'nada', estado: 'nada', entendido: 'nada claro',
+    respuesta: 'No te entendí. Dímelo de otra forma.',
+  }]
+}
 
 function responder(res, codigo, cuerpo) {
   const json = JSON.stringify(cuerpo)
@@ -172,6 +226,33 @@ createServer((req, res) => {
       estado.cerradas.add(Number(cerrar[1]))
       return responder(res, 200, { ok: true })
     }
+    if (ruta === '/instruccion') {
+      let cuerpo = ''
+      req.on('data', (t) => { cuerpo += t })
+      req.on('end', () => {
+        const { texto = '' } = JSON.parse(cuerpo || '{}')
+        const resultados = interpretar(texto)
+        responder(res, 200, {
+          texto: resultados.map((r) => r.respuesta).join(' '),
+          resultados,
+        })
+      })
+      return
+    }
+
+    const confirmar = ruta.match(/^\/instrucciones\/(\d+)\/(confirmar|descartar)$/)
+    if (confirmar) {
+      const acepta = confirmar[2] === 'confirmar'
+      if (acepta) estado.deshechas.add(11)
+      return responder(res, 200, {
+        herramienta: 'cancelar', estado: acepta ? 'hecho' : 'nada',
+        entendido: 'cancelar «Gimnasio» el viernes 7 de agosto',
+        respuesta: acepta
+          ? 'Listo: cancelar «Gimnasio» el viernes 7 de agosto.'
+          : 'Bueno. Dímelo otra vez y lo vuelvo a intentar.',
+      })
+    }
+
     if (ruta === '/intenciones') {
       const id = intenciones.length + 1
       let cuerpo = ''

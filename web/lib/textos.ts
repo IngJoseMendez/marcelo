@@ -34,6 +34,15 @@ export function cronicaEnPalabras(e: EntradaCronica): string {
   const titulo = `«${e.titulo}»`
   const aLas = e.objetivo?.inicio ? ` de las ${hora(e.objetivo.inicio)}` : ''
 
+  // Todavía no lo ha hecho: contarlo en pasado sería mentir en la única
+  // pantalla que existe para poder confiar en ella.
+  if (e.estado === 'pendiente') {
+    return `Entendí: ${e.resumen ?? `tocar ${titulo}`}. Esperando que confirmes.`
+  }
+  if (e.estado === 'descartada') {
+    return `Entendí mal: ${e.resumen ?? `tocar ${titulo}`}.`
+  }
+
   if (e.tipo === 'cancelar_instancia') {
     return `${e.ensayo ? 'Habría cancelado' : 'Cancelé'} ${titulo}${aLas}.`
   }

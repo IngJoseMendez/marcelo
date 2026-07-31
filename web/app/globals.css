@@ -776,22 +776,37 @@ button.rejilla__hueco:active { box-shadow: inset 0 0 0 1.5px var(--linea-2); col
 .enviar:active { transform: scale(.96); }
 .enviar:disabled { opacity: .45; cursor: default; }
 
-.ajustes { display: flex; gap: 8px; margin-bottom: 14px; }
-.ajuste { flex: 1; min-width: 0; }
-.ajuste__rotulo {
-  font-size: 10.5px; font-weight: 650; letter-spacing: .06em;
-  color: var(--tinta-3); margin-bottom: 5px;
+/* lo que entendió: se enseña siempre, haya actuado o no */
+.entendido { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.entendido__caja {
+  padding: 15px 16px; border-radius: var(--r-s);
+  background: var(--lumen-sv); box-shadow: inset 0 0 0 1px var(--lumen-sv);
 }
-.ajuste__ops { display: flex; gap: 5px; }
-.ajuste__op {
-  flex: 1; height: 32px; border-radius: 10px;
-  font-size: 11.5px; font-weight: 600; letter-spacing: -.008em;
-  color: var(--tinta-3); background: var(--papel-2);
-  transition: color 160ms var(--entra), background-color 200ms var(--entra);
+/* Si no actuó, no es su mano: no se ilumina. */
+.entendido__caja[data-estado="pregunta"],
+.entendido__caja[data-estado="nada"] {
+  background: var(--papel-2); box-shadow: none;
 }
-.ajuste__op[aria-pressed="true"] {
-  color: var(--papel); background: var(--tinta);
+.entendido__texto { font-size: 15.5px; font-weight: 600; letter-spacing: -.02em; line-height: 1.32; }
+.entendido__nota { font-size: 12.5px; color: var(--lumen-tx); margin-top: 8px; letter-spacing: -.006em; }
+.entendido__caja[data-estado="pregunta"] .entendido__nota,
+.entendido__caja[data-estado="nada"] .entendido__nota { color: var(--tinta-3); }
+.entendido__acciones { display: flex; gap: 8px; margin-top: 13px; }
+.confirmar {
+  flex: 1; height: 42px; border-radius: 12px;
+  font-size: 14px; font-weight: 650; letter-spacing: -.014em;
+  color: #fff; background: linear-gradient(145deg, var(--lumen) 10%, var(--lumen-2) 150%);
+  transition: transform 160ms var(--resorte);
 }
+.confirmar:active { transform: scale(.97); }
+.confirmar:disabled, .rechazar:disabled { opacity: .5; cursor: default; }
+.rechazar {
+  height: 42px; padding: 0 16px; border-radius: 12px;
+  font-size: 14px; font-weight: 600; letter-spacing: -.014em;
+  color: var(--tinta-2); box-shadow: inset 0 0 0 1px var(--linea-2);
+  transition: transform 160ms var(--entra);
+}
+.rechazar:active { transform: scale(.97); }
 
 .pulsar {
   width: 100%; height: 52px; border-radius: 18px;

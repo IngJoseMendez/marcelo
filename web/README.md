@@ -72,11 +72,27 @@ npm run dev                       # con API_BASE=http://localhost:4000
 
 Sirve las mismas rutas con datos de ejemplo. **No se usa en producción.**
 
+## Hablarle
+
+La lámina es el canal de instrucciones, la misma boca que va a tener Telegram.
+Lo que escribas pasa por el intérprete: el modelo lo convierte en **una
+llamada a herramienta acotada** —consultar la agenda, cancelar, mover, anotar
+un pendiente, enseñar un compromiso, deshacer, poner una regla— y de ahí en
+adelante decide y actúa el mismo código que atiende los correos.
+
+Dos cosas que se ven en la pantalla:
+
+- **Siempre enseña lo que entendió**, haya actuado o no.
+- **Lo que venga de una transcripción y toque algo que ya está en el
+  calendario, se confirma antes.** Un toque, y de paso verificas que no oyó
+  «semana» donde dijiste «mañana». Esa confirmación también aparece en la
+  Crónica, así que si cierras la lámina no se pierde.
+
 ## Lo que todavía no hace
 
-- **Hablarle de verdad.** El intérprete (orden hablada → herramienta) vive con
-  el canal de voz de Telegram. Por ahora, lo que escribas en la lámina se anota
-  en la bandeja; cuando exista el intérprete, el mismo formulario apunta ahí.
+- **Oírte.** El intérprete ya está; falta el transcriptor (Groq Whisper) y la
+  ruta que sube el audio. Por eso el micrófono está apagado: lo que escribas
+  ya funciona igual que lo que dictarás.
 - **Tesoro con datos.** La asistente todavía no lleva libro contable, y la
   pantalla no inventa cifras: en cuentas, mentir en silencio es la peor forma
   de fallar.

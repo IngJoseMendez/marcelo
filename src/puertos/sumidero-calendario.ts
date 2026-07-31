@@ -22,6 +22,8 @@ export interface AccionCrearEvento {
   titulo: string
   inicio: string
   fin: string
+  /** Con RRULE se crea la serie entera: es lo que hace un compromiso. */
+  rrule?: string | null
 }
 
 export type AccionCalendario =
