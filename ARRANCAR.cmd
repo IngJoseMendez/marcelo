@@ -47,6 +47,13 @@ if not exist "node_modules" (
   echo.
 )
 
+echo   ------------------------------------------------------------
+echo    NO CIERRES ESTA VENTANA.
+echo    Mientras este abierta, la asistente esta despierta.
+echo    Si la cierras, se apaga: deja de leer correo y de contestar
+echo    por Telegram. Puedes minimizarla sin problema.
+echo   ------------------------------------------------------------
+echo.
 echo   Arrancando...
 echo.
 call npm start
