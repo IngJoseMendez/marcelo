@@ -168,6 +168,8 @@ const GUION = `
 const $ = (s, d) => (d || document).querySelector(s);
 const $$ = (s, d) => Array.from((d || document).querySelectorAll(s));
 
+var tocados = {};
+
 function pintar(revision) {
   var listos = 0, total = revision.bloques.length;
   revision.bloques.forEach(function (b) {
@@ -177,11 +179,31 @@ function pintar(revision) {
     $('.detalle', caja).textContent = b.salud === 'listo' ? b.detalle : (b.imprescindible ? 'hace falta' : 'opcional');
     if (b.salud === 'listo') listos++;
   });
+
+  // Rellenar lo que ya se guardó, para que volver aquí no parezca empezar
+  // de cero. Nunca se pisa un campo que él esté escribiendo ahora mismo.
+  Object.keys(revision.valores || {}).forEach(function (k) {
+    var campo = $('input[name="' + k + '"]');
+    if (campo && !tocados[k]) campo.value = revision.valores[k];
+  });
+  (revision.yaGuardados || []).forEach(function (k) {
+    var campo = $('input[name="' + k + '"]');
+    if (campo && !campo.value) campo.placeholder = 'ya guardado — déjalo vacío para no cambiarlo';
+  });
+
   $('.barra > i').style.width = Math.round((listos / total) * 100) + '%';
   $('.cuenta').textContent = listos + ' de ' + total + ' · ' +
     (revision.listo ? 'ya puede arrancar' : 'faltan ' + revision.faltantes + ' para arrancar');
   $('#final').style.display = revision.listo ? 'block' : 'none';
+
+  var app = revision.app || {};
+  $('#app-url').textContent = app.url || '(pon la dirección de tu app arriba)';
+  $('#app-codigo').textContent = app.codigo || '(genera los secretos arriba)';
 }
+
+document.addEventListener('input', function (e) {
+  if (e.target.name) tocados[e.target.name] = true;
+});
 
 async function pedir(ruta, cuerpo) {
   var r = await fetch(ruta, {
@@ -474,9 +496,18 @@ ${demo([
 
   <div class="final" id="final" style="display:none">
     <h2 style="margin:0 0 8px">Ya puede arrancar</h2>
-    <p class="sub" style="margin:0 auto">Reinicio y me pongo a trabajar. Arranco en
-    <b>modo sombra</b>: observo y anoto todo lo que haría, pero no toco tu calendario
-    hasta que tú lo digas.</p>
+    <p class="sub" style="margin:0 auto 18px">Esto es todo lo que necesitas en el
+    celular. No hay que volver a tocar nada de esta pantalla ni entrar a Vercel.</p>
+
+    <div style="text-align:left;max-width:30rem;margin:0 auto">
+      <label>Abre esto en tu teléfono</label>
+      <div class="copiar"><span class="mono" id="app-url">—</span><button type="button">copiar</button></div>
+      <label>Y entra con este código</label>
+      <div class="copiar"><span class="mono" id="app-codigo">—</span><button type="button">copiar</button></div>
+    </div>
+
+    <p class="sub" style="margin:18px auto 0">Arranco en <b>modo sombra</b>: observo y
+    anoto todo lo que haría, pero no toco tu calendario hasta que tú lo digas.</p>
     <div class="sombra-caja">Para soltarle la correa, cuando lleve dos semanas
     acertando: pon <code class="mono">MODO_SOMBRA=false</code> en el <code class="mono">.env</code>.</div>
     <form method="post" action="/api/reiniciar">

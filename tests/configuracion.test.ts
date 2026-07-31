@@ -1,10 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { fundirEnv, leerEnv } from '../src/configuracion/archivo-env.ts'
-import { revisar, asomar } from '../src/configuracion/estado.ts'
+import { revisar, asomar, valoresRecordados } from '../src/configuracion/estado.ts'
 import { elegirModelos } from '../src/configuracion/modelos.ts'
 import { canjearCodigo, cuentaDelIdToken, urlDeConsentimiento } from '../src/configuracion/oauth.ts'
 import { urlEnSalida } from '../src/configuracion/tunel.ts'
+import { crearEnlacePublico } from '../src/configuracion/enlace.ts'
 import { publicarVariables, redesplegar, variablesDeLaApp } from '../src/configuracion/vercel.ts'
 import { esperarChat, probarBase, probarGroq, probarTelegram } from '../src/configuracion/verificaciones.ts'
 
@@ -123,6 +124,22 @@ test('un secreto se asoma por las puntas', () => {
   assert.equal(asomar('gsk_abcdefghijklmnop'), 'gsk_…mnop')
   assert.equal(asomar('corto'), '·····')
   assert.equal(asomar(undefined), '')
+})
+
+test('la página recuerda lo puesto, pero nunca le devuelven los secretos', () => {
+  const r = valoresRecordados({
+    DATABASE_URL: 'postgres://x', APP_URL: 'https://app.test',
+    GOOGLE_CLIENT_ID: 'publico.apps.googleusercontent.com',
+    GOOGLE_CLIENT_SECRET: 'GOCSPX-secreto', GROQ_API_KEY: 'gsk_secreto',
+  })
+
+  assert.equal(r.valores.APP_URL, 'https://app.test')
+  assert.equal(r.valores.GOOGLE_CLIENT_ID, 'publico.apps.googleusercontent.com')
+  assert.equal(r.valores.GOOGLE_CLIENT_SECRET, undefined)
+  assert.equal(r.valores.GROQ_API_KEY, undefined)
+  // Un campo que ya está bien no tiene por qué volver a viajar: la página
+  // sólo dice «ya guardado», y vacío significa «déjalo como está».
+  assert.deepEqual(r.yaGuardados.sort(), ['GOOGLE_CLIENT_SECRET', 'GROQ_API_KEY'])
 })
 
 // ── elegir modelos del catálogo vivo ────────────────────────────
@@ -296,6 +313,97 @@ test('lo que une la app con la laptop son cuatro valores', () => {
 
   assert.equal(v.API_BASE, 'https://tunel.test', 'por dónde se llega a la laptop')
   assert.equal(v.API_TOKEN, 'k', 'con qué se identifica al llamar')
+})
+
+// ── el enlace tras un apagón ────────────────────────────────────
+
+function enlaceDePrueba(o: {
+  urlConocida: string
+  urlNueva: string
+  vercel?: { token: string; proyecto: string; gancho: string }
+}) {
+  const guardadas: string[] = []
+  const publicadas: Array<Record<string, string>> = []
+  const desplegados: string[] = []
+
+  const enlace = crearEnlacePublico({
+    puertoLocal: 3000,
+    urlConocida: o.urlConocida,
+    vercel: o.vercel ?? { token: 't', proyecto: 'p', gancho: 'g' },
+    guardar: async (url) => { guardadas.push(url) },
+    abrir: async () => ({ url: o.urlNueva, efimera: true, detener() {} }),
+    publicar: async (_d, vars) => {
+      publicadas.push(vars)
+      return { ok: true, mensaje: 'ok', puestas: Object.keys(vars) }
+    },
+    desplegar: async (gancho) => {
+      desplegados.push(gancho)
+      return { ok: true, mensaje: 'redesplegando' }
+    },
+  })
+
+  return { enlace, guardadas, publicadas, desplegados }
+}
+
+test('tras un apagón, la dirección nueva se guarda y se le cuenta a Vercel sola', async () => {
+  // Es lo que evita que cada corte de luz sea una visita del ingeniero: el
+  // túnel gratuito estrena dirección cada vez que arranca.
+  const p = enlaceDePrueba({
+    urlConocida: 'https://vieja.trycloudflare.com',
+    urlNueva: 'https://nueva.trycloudflare.com',
+  })
+
+  const r = await p.enlace.encender()
+
+  assert.equal(r.cambio, true)
+  assert.equal(r.publicado, true)
+  assert.deepEqual(p.guardadas, ['https://nueva.trycloudflare.com'])
+  assert.deepEqual(p.publicadas, [{ API_BASE: 'https://nueva.trycloudflare.com' }])
+  assert.deepEqual(p.desplegados, ['g'], 'sin redesplegar, la app sigue con la de ayer')
+})
+
+test('si la dirección es la misma, no se redespliega por costumbre', async () => {
+  const p = enlaceDePrueba({
+    urlConocida: 'https://misma.trycloudflare.com',
+    urlNueva: 'https://misma.trycloudflare.com',
+  })
+
+  const r = await p.enlace.encender()
+
+  assert.equal(r.cambio, false)
+  assert.deepEqual(p.publicadas, [])
+  assert.deepEqual(p.desplegados, [],
+    'un redespliegue de más deja la app caída un minuto sin ninguna falta')
+})
+
+test('sin credenciales de Vercel avisa en vez de creer que quedó bien', async () => {
+  const p = enlaceDePrueba({
+    urlConocida: 'https://vieja.trycloudflare.com',
+    urlNueva: 'https://nueva.trycloudflare.com',
+    vercel: { token: '', proyecto: '', gancho: '' },
+  })
+
+  const r = await p.enlace.encender()
+
+  assert.equal(r.cambio, true)
+  assert.equal(r.publicado, false)
+  assert.match(r.motivo!, /dirección vieja/)
+  assert.deepEqual(p.guardadas, ['https://nueva.trycloudflare.com'],
+    'aunque no se publique, aquí sí queda apuntada')
+})
+
+test('con variables puestas pero sin gancho, lo dice: es la trampa clásica', async () => {
+  const p = enlaceDePrueba({
+    urlConocida: '',
+    urlNueva: 'https://nueva.trycloudflare.com',
+    vercel: { token: 't', proyecto: 'p', gancho: '' },
+  })
+
+  const r = await p.enlace.encender()
+
+  assert.equal(r.publicado, false)
+  assert.match(r.motivo!, /no se aplican/)
+  assert.deepEqual(p.desplegados, [])
 })
 
 // ── las pruebas de cada credencial ──────────────────────────────

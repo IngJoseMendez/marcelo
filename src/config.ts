@@ -34,6 +34,18 @@ const Esquema = z.object({
   API_TOKEN: z.string().default(''),
   // Para el botón «Ver detalle» del resumen. Sin ella, no se ofrece.
   APP_URL: z.string().default(''),
+
+  // El enlace público: por dónde la app en Vercel alcanza esta laptop.
+  // Con TUNEL_AUTO el servicio lo rehace solo al arrancar, que es lo que
+  // hace falta para que un apagón no obligue a que venga alguien.
+  TUNEL_AUTO: z.string().default('false'),
+  URL_PUBLICA: z.string().default(''),
+  TUNEL_NOMBRE: z.string().default(''),
+  CLOUDFLARED_RUTA: z.string().default(''),
+  VERCEL_TOKEN: z.string().default(''),
+  VERCEL_PROYECTO: z.string().default(''),
+  VERCEL_GANCHO: z.string().default(''),
+  RUTA_ENV: z.string().default(''),
   JORNADA_DESDE: z.string().regex(/^\d{2}:\d{2}$/).default('07:00'),
   JORNADA_HASTA: z.string().regex(/^\d{2}:\d{2}$/).default('22:00'),
 
@@ -86,6 +98,21 @@ export function cargarConfig(env: Record<string, string | undefined>) {
 
     api: { token: v.API_TOKEN },
     urlApp: v.APP_URL.trim(),
+
+    tunel: {
+      // Sólo un "true" explícito lo enciende: levantar procesos por su
+      // cuenta no es algo que deba pasarle a nadie por sorpresa.
+      auto: v.TUNEL_AUTO === 'true',
+      url: v.URL_PUBLICA.trim(),
+      nombre: v.TUNEL_NOMBRE.trim(),
+      ejecutable: v.CLOUDFLARED_RUTA.trim(),
+    },
+    vercel: {
+      token: v.VERCEL_TOKEN.trim(),
+      proyecto: v.VERCEL_PROYECTO.trim(),
+      gancho: v.VERCEL_GANCHO.trim(),
+    },
+    rutaEnv: v.RUTA_ENV.trim() || '.env',
 
     // Ventana de trabajo: fuera de ella el tiempo libre no cuenta como hueco.
     // Sin esto, «tienes 9 horas libres» incluiría la madrugada.

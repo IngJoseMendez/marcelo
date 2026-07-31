@@ -70,6 +70,35 @@ export function fundirEnv(original: string, cambios: Record<string, string>): st
   return salida.join('\n')
 }
 
+/**
+ * Escribir cambios en el `.env`, con respaldo.
+ *
+ * Lo usan los dos lados: el asistente cuando te guía, y el servicio ya en
+ * marcha cuando la dirección del túnel cambia sola tras un reinicio. Es la
+ * misma operación y tiene que dejar el archivo igual de legible.
+ */
+export async function escribirEnv(
+  ruta: string,
+  cambios: Record<string, string>,
+  io: {
+    existe: (r: string) => boolean
+    leer: (r: string) => Promise<string>
+    escribir: (r: string, t: string) => Promise<void>
+    respaldar: (r: string, destino: string) => Promise<void>
+  }
+): Promise<void> {
+  const limpios = Object.fromEntries(
+    Object.entries(cambios).filter(([, v]) => v !== undefined && v !== null))
+  if (Object.keys(limpios).length === 0) return
+
+  const habia = io.existe(ruta)
+  const original = habia ? await io.leer(ruta) : ENV_INICIAL
+  // Un respaldo antes de cada escritura: si algo sale mal, lo que había
+  // sigue estando. Es un archivo de texto, no cuesta nada.
+  if (habia) await io.respaldar(ruta, `${ruta}.anterior`)
+  await io.escribir(ruta, fundirEnv(original, limpios))
+}
+
 /** El `.env` de partida cuando no hay ninguno: sólo el esqueleto comentado. */
 export const ENV_INICIAL = `# ─────────────────────────────────────────────
 #  Mi Segundo Cerebro

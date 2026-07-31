@@ -4,8 +4,8 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import Fastify from 'fastify'
 import { Client } from 'pg'
-import { ENV_INICIAL, fundirEnv, leerEnv } from './archivo-env.ts'
-import { revisar, type Revision } from './estado.ts'
+import { escribirEnv, leerEnv } from './archivo-env.ts'
+import { revisar, valoresRecordados, type Revision } from './estado.ts'
 import { paginaConfiguracion } from './pagina.ts'
 import { esperarChat, probarBase, probarGroq, probarTelegram } from './verificaciones.ts'
 import { CLAVES, canjearCodigo, urlDeConsentimiento, type Proveedor } from './oauth.ts'
@@ -60,18 +60,14 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
   let tunel: Tunel | null = null
 
   async function guardar(cambios: Record<string, string>): Promise<void> {
-    const limpios = Object.fromEntries(
-      Object.entries(cambios).filter(([, v]) => v !== undefined && v !== null))
-    if (Object.keys(limpios).length === 0) return
-
-    const original = existsSync(rutaEnv) ? await readFile(rutaEnv, 'utf8') : ENV_INICIAL
-    // Un respaldo antes de cada escritura: si algo sale mal, lo que había
-    // sigue estando. Es un archivo de texto, no cuesta nada.
-    if (existsSync(rutaEnv)) await copyFile(rutaEnv, `${rutaEnv}.anterior`)
-    await writeFile(rutaEnv, fundirEnv(original, limpios), 'utf8')
-
-    Object.assign(env, limpios)
-    Object.assign(process.env, limpios)
+    await escribirEnv(rutaEnv, cambios, {
+      existe: existsSync,
+      leer: (r) => readFile(r, 'utf8'),
+      escribir: (r, t) => writeFile(r, t, 'utf8'),
+      respaldar: (r, destino) => copyFile(r, destino),
+    })
+    Object.assign(env, cambios)
+    Object.assign(process.env, cambios)
   }
 
   const estado = (): Revision => revisar(env)
@@ -91,7 +87,12 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
     })
   })
 
-  app.get('/api/estado', async () => estado())
+  app.get('/api/estado', async () => ({
+    ...estado(),
+    ...valoresRecordados(env),
+    // Lo que él necesita para abrirla en el celular cuando todo esté listo.
+    app: { url: env.APP_URL ?? '', codigo: env.CODIGO_ACCESO ?? '' },
+  }))
 
   // ── probar cada pieza ───────────────────────────────────────
 
@@ -110,17 +111,23 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
     return r
   })
 
+  // Un campo que llega vacío no borra lo que ya estaba: la página no
+  // devuelve los secretos, así que vacío significa «déjalo como está».
+  const oLoGuardado = (cuerpo: Record<string, string>, clave: string): string =>
+    (cuerpo[clave] ?? '').trim() || (env[clave] ?? '')
+
   app.post('/api/probar/groq', async (req) => {
-    const { GROQ_API_KEY = '' } = (req.body ?? {}) as Record<string, string>
+    const cuerpo = (req.body ?? {}) as Record<string, string>
     const r = await probarGroq(
-      GROQ_API_KEY, env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1')
+      oLoGuardado(cuerpo, 'GROQ_API_KEY'),
+      env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1')
     if (r.ok && r.guardar) await guardar(r.guardar)
     return r
   })
 
   app.post('/api/probar/telegram', async (req) => {
-    const { TELEGRAM_BOT_TOKEN = '' } = (req.body ?? {}) as Record<string, string>
-    const r = await probarTelegram(TELEGRAM_BOT_TOKEN)
+    const cuerpo = (req.body ?? {}) as Record<string, string>
+    const r = await probarTelegram(oLoGuardado(cuerpo, 'TELEGRAM_BOT_TOKEN'))
     if (r.ok && r.guardar) await guardar(r.guardar)
     return r
   })
@@ -138,9 +145,10 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
 
   const arrancarOauth = (proveedor: Proveedor) => async (req: { body?: unknown }) => {
     const cuerpo = (req.body ?? {}) as Record<string, string>
-    const clientId = (proveedor === 'google' ? cuerpo.GOOGLE_CLIENT_ID : cuerpo.MS_CLIENT_ID) ?? ''
-    const clientSecret =
-      (proveedor === 'google' ? cuerpo.GOOGLE_CLIENT_SECRET : cuerpo.MS_CLIENT_SECRET) ?? ''
+    const clientId = oLoGuardado(
+      cuerpo, proveedor === 'google' ? 'GOOGLE_CLIENT_ID' : 'MS_CLIENT_ID')
+    const clientSecret = oLoGuardado(
+      cuerpo, proveedor === 'google' ? 'GOOGLE_CLIENT_SECRET' : 'MS_CLIENT_SECRET')
 
     if (!clientId.trim() || !clientSecret.trim()) {
       return { ok: false, mensaje: 'Faltan el ID de cliente o el secreto.' }
@@ -253,15 +261,13 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
 
   app.post('/api/vercel', async (req) => {
     const cuerpo = (req.body ?? {}) as Record<string, string>
-    await guardar({
-      API_TOKEN: cuerpo.API_TOKEN ?? '',
-      CODIGO_ACCESO: cuerpo.CODIGO_ACCESO ?? '',
-      SECRETO_SESION: cuerpo.SECRETO_SESION ?? '',
-      APP_URL: cuerpo.APP_URL ?? '',
-      VERCEL_TOKEN: cuerpo.VERCEL_TOKEN ?? '',
-      VERCEL_PROYECTO: cuerpo.VERCEL_PROYECTO ?? '',
-      VERCEL_GANCHO: cuerpo.VERCEL_GANCHO ?? '',
-    })
+    // Con `oLoGuardado` y no con `?? ''`: si él vuelve a esta pantalla y
+    // guarda con el token de Vercel en blanco, lo de antes tiene que
+    // seguir ahí. Blanquearlo dejaría la app sin poder actualizarse sola.
+    await guardar(Object.fromEntries([
+      'API_TOKEN', 'CODIGO_ACCESO', 'SECRETO_SESION', 'APP_URL',
+      'VERCEL_TOKEN', 'VERCEL_PROYECTO', 'VERCEL_GANCHO',
+    ].map((clave) => [clave, oLoGuardado(cuerpo, clave)])))
 
     const variables = variablesDeLaApp(env)
     if (!variables.API_BASE) {

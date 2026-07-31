@@ -1,5 +1,8 @@
 import type { Config } from './config.ts'
 import { createHmac } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { copyFile, readFile, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import cron from 'node-cron'
 import pino from 'pino'
 import { fuentesConfiguradas } from './config.ts'
@@ -28,6 +31,8 @@ import { crearServicioInstruccion } from './servicios/instruccion.ts'
 import { crearServicioResumen } from './servicios/resumen.ts'
 import { crearServicioConversacion } from './servicios/conversacion.ts'
 import { crearCanalTelegram } from './adaptadores/telegram.ts'
+import { crearEnlacePublico } from './configuracion/enlace.ts'
+import { escribirEnv } from './configuracion/archivo-env.ts'
 import { crearClasificador } from './pipeline/clasificador.ts'
 import { crearExtractor } from './pipeline/extractor.ts'
 import { crearDesempate } from './pipeline/desempate.ts'
@@ -320,11 +325,51 @@ export async function arrancarAsistente(config: Config): Promise<void> {
   // lo único que funciona sin IP pública.
   canal?.arrancar()
 
+  // ── El enlace con la app ──────────────────────────────────────
+  // Se rehace al arrancar porque el túnel gratuito estrena dirección cada
+  // vez, y sin esto cada apagón dejaría la app llamando a un sitio muerto
+  // hasta que alguien lo arreglara a mano.
+  const enlace = config.tunel.auto
+    ? crearEnlacePublico({
+        puertoLocal: config.puerto,
+        urlConocida: config.tunel.url,
+        nombre: config.tunel.nombre,
+        ejecutable: config.tunel.ejecutable,
+        vercel: config.vercel,
+        registro: log,
+        guardar: (url) => escribirEnv(resolve(config.rutaEnv), { URL_PUBLICA: url }, {
+          existe: existsSync,
+          leer: (r) => readFile(r, 'utf8'),
+          escribir: (r, t) => writeFile(r, t, 'utf8'),
+          respaldar: (r, destino) => copyFile(r, destino),
+        }),
+      })
+    : null
+
+  if (enlace) {
+    try {
+      const r = await enlace.encender()
+      log.info({ url: r.url, cambio: r.cambio, publicado: r.publicado, motivo: r.motivo },
+        r.cambio
+          ? 'dirección pública nueva'
+          : 'dirección pública sin cambios: no hace falta redesplegar')
+      if (r.cambio && !r.publicado) {
+        log.warn({ motivo: r.motivo },
+          'LA APP SIGUE APUNTANDO A LA DIRECCIÓN VIEJA: no responderá hasta arreglarlo')
+      }
+    } catch (e) {
+      // Sin túnel, la asistente sigue trabajando: lee correo, mueve la
+      // agenda y contesta por Telegram. Lo único que se pierde es la app.
+      log.error({ err: e }, 'no se pudo abrir el túnel; la app no podrá llegar')
+    }
+  }
+
   // Sin `allSettled` esto se cuelga: con `canal` en null, el encadenamiento
   // opcional se lleva por delante también el `.finally`, y nadie sale nunca.
   for (const señal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(señal, () => {
       log.info({ señal }, 'cerrando')
+      enlace?.detener()
       void Promise.allSettled([canal?.detener(), app.close()])
         .finally(() => process.exit(0))
     })

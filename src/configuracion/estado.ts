@@ -119,6 +119,42 @@ export function revisar(env: Env): Revision {
   }
 }
 
+/**
+ * Lo que se le puede devolver a la página para rellenar los campos.
+ *
+ * Los secretos NO están aquí. No por miedo a quien mira —esta página sólo
+ * se abre desde la propia laptop— sino porque devolverlos obligaría a que
+ * viajaran de vuelta en cada guardado, y un campo que ya está bien no
+ * tiene por qué volver a pasar por ningún sitio. Lo que se guardó, se
+ * queda: si el campo llega vacío, el asistente conserva lo que ya tenía.
+ */
+const RECORDABLES = [
+  'DATABASE_URL', 'GOOGLE_CLIENT_ID', 'MS_CLIENT_ID', 'API_TOKEN',
+  'CODIGO_ACCESO', 'SECRETO_SESION', 'APP_URL', 'URL_PUBLICA', 'TUNEL_NOMBRE',
+  'VERCEL_PROYECTO', 'VERCEL_GANCHO',
+] as const
+
+/** Los que existen pero no se devuelven: la página sólo dirá «ya guardado». */
+const GUARDADOS = [
+  'GROQ_API_KEY', 'GOOGLE_CLIENT_SECRET', 'MS_CLIENT_SECRET',
+  'TELEGRAM_BOT_TOKEN', 'VERCEL_TOKEN',
+] as const
+
+export function valoresRecordados(env: Env): {
+  valores: Record<string, string>
+  yaGuardados: string[]
+} {
+  const valores: Record<string, string> = {}
+  for (const clave of RECORDABLES) {
+    const v = env[clave]?.trim()
+    if (v) valores[clave] = v
+  }
+  return {
+    valores,
+    yaGuardados: GUARDADOS.filter((c) => Boolean(env[c]?.trim())),
+  }
+}
+
 /** Para el arranque: una línea que dice qué falta, sin abrir la página. */
 export function resumirFaltantes(r: Revision): string {
   const pendientes = r.bloques
