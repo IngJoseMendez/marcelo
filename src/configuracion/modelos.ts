@@ -49,7 +49,25 @@ const grande = (id: string) => /\b(70|90|120|405)b\b/i.test(id)
 const pequeno = (id: string) => /\b([1-9]|1[0-7])b\b/i.test(id)
 
 function primero(disponibles: Set<string>, preferidos: readonly string[]): string | null {
-  return preferidos.find((m) => disponibles.has(m)) ?? null
+  // Coincidencia exacta primero; si no, por prefijo, porque muchos
+  // proveedores sirven el mismo modelo con fecha pegada al final
+  // («gpt-4o-2024-11-20») o con el autor delante («meta-llama/…»).
+  const exacto = preferidos.find((m) => disponibles.has(m))
+  if (exacto) return exacto
+
+  for (const querido of preferidos) {
+    const parecido = [...disponibles].find(
+      (id) => id === querido || id.endsWith(`/${querido}`) || id.startsWith(`${querido}-`))
+    if (parecido) return parecido
+  }
+  return null
+}
+
+/** Lo que prefiere cada proveedor, si trae preferencias propias. */
+export interface Preferencias {
+  clasificador?: readonly string[]
+  extractor?: readonly string[]
+  transcriptor?: readonly string[]
 }
 
 /**
@@ -57,30 +75,42 @@ function primero(disponibles: Set<string>, preferidos: readonly string[]): strin
  * esté en la respuesta: adivinar precios o tamaños desde aquí sería volver
  * a dar por sentado lo que hay que verificar.
  */
-export function elegirModelos(ids: readonly string[]): Eleccion {
+export function elegirModelos(
+  ids: readonly string[],
+  /** Las del proveedor elegido. Sin ellas manda la lista de Groq. */
+  suyas: Preferencias = {}
+): Eleccion {
   const disponibles = new Set(ids)
   const avisos: string[] = []
 
   const deTexto = ids.filter((id) => !noEsDeTexto(id))
   const deVoz = ids.filter(esVoz)
 
-  const extractor = primero(disponibles, PREFERIDOS.extractor)
+  // Primero lo que prefiera el proveedor, después lo de Groq —que sigue
+  // valiendo para cualquiera que sirva Llama— y sólo entonces la heurística.
+  const extractor = primero(disponibles, suyas.extractor ?? [])
+    ?? primero(disponibles, PREFERIDOS.extractor)
     ?? deTexto.find(grande)
     ?? deTexto[0]
     ?? ''
 
-  const clasificador = primero(disponibles, PREFERIDOS.clasificador)
+  const clasificador = primero(disponibles, suyas.clasificador ?? [])
+    ?? primero(disponibles, PREFERIDOS.clasificador)
     ?? deTexto.find(pequeno)
     // Sin uno pequeño, mejor gastar de más que no clasificar.
     ?? extractor
 
-  const transcriptor = primero(disponibles, PREFERIDOS.transcriptor)
+  const transcriptor = primero(disponibles, suyas.transcriptor ?? [])
+    ?? primero(disponibles, PREFERIDOS.transcriptor)
     ?? deVoz.find((id) => /large/i.test(id))
     ?? ''
 
-  if (!extractor) avisos.push('Groq no ofreció ningún modelo de texto que sirva para leer correos.')
+  if (!extractor) {
+    avisos.push('Este proveedor no ofreció ningún modelo de texto que sirva para leer correos.')
+  }
   if (!transcriptor) {
-    avisos.push('No hay ningún Whisper grande en el catálogo: sin él, las notas de voz no se transcriben.')
+    avisos.push('Este proveedor no transcribe audio. Puedes dejar Groq sólo para la voz: '
+      + 'es gratis y es lo que mejor entiende el acento costeño.')
   } else if (!/large/i.test(transcriptor)) {
     avisos.push('El único modelo de voz disponible no es «large». Con acento costeño eso inventa palabras.')
   }

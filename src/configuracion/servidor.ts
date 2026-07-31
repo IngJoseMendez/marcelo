@@ -9,7 +9,10 @@ import { escribirEnv, leerEnv } from './archivo-env.ts'
 import { nuevaClaveRespaldo } from '../dominio/cifrado.ts'
 import { revisar, valoresRecordados, type Revision } from './estado.ts'
 import { paginaConfiguracion } from './pagina.ts'
-import { esperarChat, probarBase, probarGroq, probarTelegram } from './verificaciones.ts'
+import { esperarChat, probarBase, probarProveedor, probarTelegram } from './verificaciones.ts'
+import {
+  POR_DEFECTO, PROVEEDORES, precioEnPalabras, proveedorPorId, urlDe,
+} from './proveedores.ts'
 import { CLAVES, canjearCodigo, urlDeConsentimiento, type Proveedor } from './oauth.ts'
 import { abrirTunel, type Tunel } from './tunel.ts'
 import { publicarVariables, redesplegar, variablesDeLaApp } from './vercel.ts'
@@ -315,13 +318,51 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
   const oLoGuardado = (cuerpo: Record<string, string>, clave: string): string =>
     (cuerpo[clave] ?? '').trim() || (env[clave] ?? '')
 
-  app.post('/api/probar/groq', async (req) => {
+  app.get('/api/proveedores', async () => ({
+    proveedores: PROVEEDORES.map((p) => ({
+      ...p, precioTexto: precioEnPalabras(p),
+    })),
+    elegido: env.LLM_PROVEEDOR || POR_DEFECTO,
+  }))
+
+  app.post('/api/probar/llm', async (req) => {
     const cuerpo = (req.body ?? {}) as Record<string, string>
-    const r = await probarGroq(
-      oLoGuardado(cuerpo, 'GROQ_API_KEY'),
-      env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1')
-    if (r.ok && r.guardar) await guardar(r.guardar)
+    const id = (cuerpo.LLM_PROVEEDOR || env.LLM_PROVEEDOR || POR_DEFECTO).trim()
+    const proveedor = proveedorPorId(id)
+
+    const r = await probarProveedor(
+      oLoGuardado(cuerpo, 'LLM_API_KEY') || env.GROQ_API_KEY || '',
+      urlDe(id, cuerpo.LLM_BASE_URL ?? ''),
+      { nombre: proveedor?.nombre, preferidos: proveedor?.preferidos })
+
+    if (r.ok && r.guardar) await guardar({ ...r.guardar, LLM_PROVEEDOR: id })
     return r
+  })
+
+  /**
+   * El oído, por su cuenta.
+   *
+   * Hay proveedores buenísimos leyendo que no transcriben. Antes que
+   * dejarla muda, se le deja el oído en Groq —que da Whisper grande
+   * gratis— y el cerebro donde se quiera.
+   */
+  app.post('/api/probar/voz', async (req) => {
+    const cuerpo = (req.body ?? {}) as Record<string, string>
+    const r = await probarProveedor(
+      oLoGuardado(cuerpo, 'VOZ_API_KEY'),
+      urlDe('groq', cuerpo.VOZ_BASE_URL ?? ''),
+      { nombre: 'el oído', preferidos: proveedorPorId('groq')?.preferidos })
+
+    if (!r.ok) return r
+    if (!r.eleccion?.transcriptor) {
+      return { ok: false, mensaje: 'Ahí no hay ningún modelo de voz. Prueba con Groq.' }
+    }
+    await guardar({
+      VOZ_API_KEY: oLoGuardado(cuerpo, 'VOZ_API_KEY'),
+      VOZ_BASE_URL: urlDe('groq', cuerpo.VOZ_BASE_URL ?? ''),
+      VOZ_MODELO: r.eleccion.transcriptor,
+    })
+    return { ok: true, mensaje: `Listo, oye con ${r.eleccion.transcriptor}.` }
   })
 
   app.post('/api/probar/telegram', async (req) => {

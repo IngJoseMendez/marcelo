@@ -111,10 +111,11 @@ export async function arrancarAsistente(config: Config): Promise<void> {
   const reloj = new RelojReal(config.zonaHoraria)
 
   // Uno solo para los dos canales: la app y Telegram oyen con el mismo oído.
-  const transcriptor = config.groq.modeloTranscriptor
+  // El oído puede venir de otro proveedor que el cerebro: hay servicios
+  // buenísimos leyendo que no transcriben, y Groq da Whisper grande gratis.
+  const transcriptor = config.voz.modelo
     ? new TranscriptorGroq(
-        config.groq.apiKey, config.groq.baseUrl,
-        config.groq.modeloTranscriptor, config.ffmpeg)
+        config.voz.apiKey, config.voz.baseUrl, config.voz.modelo, config.ffmpeg)
     : undefined
 
   const repoCompromisos = crearRepoCompromisos(db)

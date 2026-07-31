@@ -100,7 +100,7 @@ a:hover { text-decoration:underline; }
 a.fuera::after { content:' ↗'; font-size:.85em; }
 
 label { display:block; font-size:13px; font-weight:600; margin:14px 0 6px; }
-input[type=text], input[type=password] {
+input[type=text], input[type=password], select {
   width:100%; padding:12px 14px; border-radius:12px; border:1px solid var(--borde);
   background:var(--lienzo); color:var(--tinta); font:inherit; font-size:15px;
 }
@@ -402,6 +402,35 @@ async function refrescarRequisitos() {
   pintarRequisitos(await r.json());
 }
 
+// ── el catálogo de proveedores ────────────────────────────────
+var proveedores = [];
+
+function pintarProveedor() {
+  var sel = $('#LLM_PROVEEDOR');
+  var p = proveedores.filter(function (x) { return x.id === sel.value; })[0];
+  if (!p) return;
+  $('#prov-nota').textContent = p.nota;
+  $('#prov-donde').innerHTML = p.donde
+    ? 'La clave se saca en <a class="fuera" href="' + p.donde + '" target="_blank" rel="noreferrer">' + p.donde.replace(/^https?:\\/\\//, '') + '</a>'
+    : '';
+  // La dirección se rellena sola, pero si él ya escribió una, manda la suya.
+  var url = $('#LLM_BASE_URL');
+  if (!tocados.LLM_BASE_URL) url.value = p.baseUrl;
+}
+
+async function cargarProveedores() {
+  var r = await (await fetch('/api/proveedores')).json();
+  proveedores = r.proveedores;
+  var sel = $('#LLM_PROVEEDOR');
+  sel.innerHTML = proveedores.map(function (p) {
+    return '<option value="' + p.id + '">' + p.nombre + ' — ' + p.precioTexto
+      + (p.voz ? ' · también oye' : '') + '</option>';
+  }).join('');
+  sel.value = r.elegido;
+  sel.addEventListener('change', function () { tocados.LLM_BASE_URL = false; pintarProveedor(); });
+  pintarProveedor();
+}
+
 async function refrescarVigilia() {
   var r = await (await fetch('/api/vigilia')).json();
   var caja = $('[data-bloque="vigilia"]');
@@ -427,6 +456,7 @@ document.addEventListener('click', async function (e) {
 refrescar();
 refrescarRequisitos();
 refrescarVigilia();
+cargarProveedores();
 setInterval(refrescar, 15000);
 setInterval(refrescarVigilia, 20000);
 // Mientras algo se instala hay que mirar más seguido, para poder contarlo.
@@ -511,24 +541,42 @@ y por qué. Corre dentro de Docker, en esta misma laptop — no sale a internet.
   value="${esc(d.urlPropuestaBase)}" spellcheck="false">
 <button class="accion" data-ruta="/api/probar/base" data-esperando="probando…">Probar conexión</button>`)
 
-  const groq = bloque('groq', 'Cerebro (Groq)', `
-<p class="sub">Es lo que le permite entender un correo. Gratis, y con
-<b>Zero Data Retention</b> no entrenan con lo tuyo.</p>
-<ol class="pasos">
-  <li>Entra a <a class="fuera" href="https://console.groq.com/keys" target="_blank" rel="noreferrer">console.groq.com/keys</a> y crea una cuenta.</li>
-  <li>Botón <b>Create API Key</b>, ponle cualquier nombre y <b>cópiala ahora</b>: no la vuelve a enseñar.</li>
-  <li>Ve a <a class="fuera" href="https://console.groq.com/settings/data-controls" target="_blank" rel="noreferrer">Settings → Data Controls</a> y activa <b>Zero Data Retention</b>.</li>
-  <li>Pégala abajo y dale a Probar: <b>yo elijo los modelos solos</b> del catálogo de hoy.</li>
-</ol>
-${demo([
-  ['API Keys', '→ Create API Key'],
-  ['Data Controls', '→ Zero Data Retention'],
-  ['Listo', '→ pega la clave aquí'],
-])}
-<label for="GROQ_API_KEY">Clave de Groq</label>
-<input type="password" id="GROQ_API_KEY" name="GROQ_API_KEY" class="mono"
-  placeholder="gsk_…" spellcheck="false" autocomplete="off">
-<button class="accion" data-ruta="/api/probar/groq" data-esperando="mirando el catálogo…">Probar y elegir modelos</button>`)
+  const groq = bloque('groq', 'El cerebro', `
+<p class="sub">Es lo que le permite <b>entender</b> un correo: leerlo y sacar que la
+clase del miércoles se canceló. Puedes usar el que quieras — sólo tiene que hablar
+la API de OpenAI, que a estas alturas la habla casi todo el mundo.</p>
+
+<label for="LLM_PROVEEDOR">¿Con cuál?</label>
+<select id="LLM_PROVEEDOR" name="LLM_PROVEEDOR"></select>
+<p class="detalle" id="prov-nota" style="margin-top:8px"></p>
+<p class="detalle" id="prov-donde" style="margin-top:6px"></p>
+
+<label for="LLM_API_KEY">La clave</label>
+<input type="password" id="LLM_API_KEY" name="LLM_API_KEY" class="mono"
+  placeholder="pégala aquí" spellcheck="false" autocomplete="off">
+<label for="LLM_BASE_URL">Dirección (la relleno yo según el que elijas)</label>
+<input type="text" id="LLM_BASE_URL" name="LLM_BASE_URL" class="mono" spellcheck="false">
+<button class="accion" data-ruta="/api/probar/llm" data-esperando="mirando el catálogo…">Probar y elegir modelos</button>
+
+<div class="aviso ojo" style="margin-top:18px"><b>No escribes ningún nombre de
+modelo.</b> Le pregunto al proveedor cuáles tiene <i>hoy</i> y elijo: uno barato
+para clasificar y uno bueno para leer. Si mañana retiran el que usábamos, coge el
+siguiente en vez de quedarse apuntando a un nombre muerto.</div>
+
+<details class="tecnico">
+  <summary>El oído, si tu proveedor no transcribe</summary>
+  <p class="detalle" style="margin:10px 0">Hay servicios buenísimos leyendo que no
+  saben oír. Antes que dejarla muda, déjale el oído en <b>Groq</b>: da Whisper
+  grande gratis, y con el acento costeño de Marcelo un modelo pequeño produce
+  basura — está medido con su audio de verdad.</p>
+  <label for="VOZ_API_KEY">Clave para la voz (una de Groq sirve)</label>
+  <input type="password" id="VOZ_API_KEY" name="VOZ_API_KEY" class="mono"
+    spellcheck="false" autocomplete="off">
+  <label for="VOZ_BASE_URL">Dirección</label>
+  <input type="text" id="VOZ_BASE_URL" name="VOZ_BASE_URL" class="mono"
+    placeholder="https://api.groq.com/openai/v1" spellcheck="false">
+  <button class="accion suave" data-ruta="/api/probar/voz" data-esperando="probando…">Probar el oído</button>
+</details>`)
 
   const google = bloque('google', 'Google (Gmail + Calendar)', `
 <p class="sub">Aquí es donde ella lee tu correo y mueve tu calendario. Es el paso

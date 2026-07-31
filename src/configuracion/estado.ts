@@ -60,9 +60,33 @@ function bloque(
   }
 }
 
-const MODELOS = ['GROQ_MODELO_CLASIFICADOR', 'GROQ_MODELO_EXTRACTOR', 'GROQ_MODELO_TRANSCRIPTOR']
+/** Sólo los dos que hacen falta para leer correo: la voz es aparte. */
+const MODELOS = ['LLM_MODELO_CLASIFICADOR', 'LLM_MODELO_EXTRACTOR']
 
-export function revisar(env: Env): Revision {
+/**
+ * Lo nuevo si está, lo viejo si no.
+ *
+ * Un `.env` escrito antes de que el cerebro pudiera ser otro que Groq
+ * tiene que seguir arrancando: renombrar variables no puede costarle a
+ * nadie una tarde de depuración.
+ */
+function conRespaldo(env: Env): Env {
+  const pares: Array<[string, string]> = [
+    ['LLM_API_KEY', 'GROQ_API_KEY'],
+    ['LLM_BASE_URL', 'GROQ_BASE_URL'],
+    ['LLM_MODELO_CLASIFICADOR', 'GROQ_MODELO_CLASIFICADOR'],
+    ['LLM_MODELO_EXTRACTOR', 'GROQ_MODELO_EXTRACTOR'],
+    ['LLM_MODELO_TRANSCRIPTOR', 'GROQ_MODELO_TRANSCRIPTOR'],
+  ]
+  const mezcla: Env = { ...env }
+  for (const [nuevo, viejo] of pares) {
+    if (!mezcla[nuevo]?.trim() && env[viejo]?.trim()) mezcla[nuevo] = env[viejo]
+  }
+  return mezcla
+}
+
+export function revisar(entrada: Env): Revision {
+  const env = conRespaldo(entrada)
   const bloques: Bloque[] = [
     bloque('base', 'Base de datos', true, ['DATABASE_URL'], env,
       (e) => {
@@ -71,8 +95,12 @@ export function revisar(env: Env): Revision {
         return m ? `${m[2]} en ${m[1]}` : 'configurada'
       }),
 
-    bloque('groq', 'Cerebro (Groq)', true, ['GROQ_API_KEY', ...MODELOS], env,
-      (e) => `${e.GROQ_MODELO_EXTRACTOR} · ${e.GROQ_MODELO_TRANSCRIPTOR}`),
+    bloque('groq', 'El cerebro', true, MODELOS, env,
+      (e) => {
+        const quien = e.LLM_PROVEEDOR?.trim() || 'groq'
+        const oye = (e.VOZ_MODELO || e.LLM_MODELO_TRANSCRIPTOR)?.trim()
+        return `${quien} · ${e.LLM_MODELO_EXTRACTOR}${oye ? ` · oye con ${oye}` : ' · sin voz'}`
+      }),
 
     bloque('google', 'Google (Gmail + Calendar)', false,
       ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'], env,
@@ -129,14 +157,14 @@ export function revisar(env: Env): Revision {
  * queda: si el campo llega vacío, el asistente conserva lo que ya tenía.
  */
 const RECORDABLES = [
-  'DATABASE_URL', 'GOOGLE_CLIENT_ID', 'MS_CLIENT_ID', 'API_TOKEN',
+  'DATABASE_URL', 'LLM_PROVEEDOR', 'LLM_BASE_URL', 'VOZ_BASE_URL', 'GOOGLE_CLIENT_ID', 'MS_CLIENT_ID', 'API_TOKEN',
   'CODIGO_ACCESO', 'SECRETO_SESION', 'RESPALDO_CLAVE', 'APP_URL', 'URL_PUBLICA', 'TUNEL_NOMBRE',
   'VERCEL_PROYECTO', 'VERCEL_GANCHO',
 ] as const
 
 /** Los que existen pero no se devuelven: la página sólo dirá «ya guardado». */
 const GUARDADOS = [
-  'GROQ_API_KEY', 'GOOGLE_CLIENT_SECRET', 'MS_CLIENT_SECRET',
+  'LLM_API_KEY', 'VOZ_API_KEY', 'GOOGLE_CLIENT_SECRET', 'MS_CLIENT_SECRET',
   'TELEGRAM_BOT_TOKEN', 'VERCEL_TOKEN',
 ] as const
 

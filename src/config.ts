@@ -4,11 +4,27 @@ const Esquema = z.object({
   DATABASE_URL: z.string().min(1),
   ZONA_HORARIA: z.string().default('America/Bogota'),
 
-  GROQ_API_KEY: z.string().min(1),
+  // El cerebro. Cualquier servicio que hable la API de OpenAI sirve, así
+  // que los nombres ya no dicen «GROQ»: los viejos se siguen leyendo como
+  // respaldo para no romperle el .env a nadie.
+  LLM_PROVEEDOR: z.string().default('groq'),
+  LLM_API_KEY: z.string().default(''),
+  LLM_BASE_URL: z.string().default(''),
+  LLM_MODELO_CLASIFICADOR: z.string().default(''),
+  LLM_MODELO_EXTRACTOR: z.string().default(''),
+  LLM_MODELO_TRANSCRIPTOR: z.string().default(''),
+
+  GROQ_API_KEY: z.string().default(''),
   GROQ_BASE_URL: z.string().default('https://api.groq.com/openai/v1'),
   GROQ_MODELO_CLASIFICADOR: z.string().default(''),
   GROQ_MODELO_EXTRACTOR: z.string().default(''),
   GROQ_MODELO_TRANSCRIPTOR: z.string().default(''),
+
+  // El oído, aparte del cerebro: hay proveedores buenísimos leyendo que no
+  // transcriben, y Groq da Whisper grande gratis. Vacío = el mismo cerebro.
+  VOZ_API_KEY: z.string().default(''),
+  VOZ_BASE_URL: z.string().default(''),
+  VOZ_MODELO: z.string().default(''),
   // Opcional: sube el volumen de las notas de voz antes de transcribirlas.
   // Sin esto el audio va como llegó, y llega bajo.
   FFMPEG_RUTA: z.string().default(''),
@@ -70,16 +86,37 @@ export function cargarConfig(env: Record<string, string | undefined>) {
   }
   const v = r.data
 
+  // Sin cerebro no hay nada que arrancar. Ya no lo puede exigir el esquema
+  // —la clave puede venir con cualquiera de los dos nombres, y un modelo
+  // que corre en esta misma máquina no pide ninguna— así que se comprueba
+  // aquí, que es donde se sabe de dónde salió cada valor.
+  const claveLlm = v.LLM_API_KEY || v.GROQ_API_KEY
+  const urlLlm = v.LLM_BASE_URL || v.GROQ_BASE_URL
+  const enEstaMaquina = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(urlLlm)
+  if (!claveLlm && !enEstaMaquina) {
+    throw new Error('Configuración inválida: falta LLM_API_KEY (o GROQ_API_KEY)')
+  }
+
   return Object.freeze({
     urlBaseDatos: v.DATABASE_URL,
     zonaHoraria: v.ZONA_HORARIA,
 
+    // Lo nuevo manda; lo viejo sigue valiendo. Un .env de antes del cambio
+    // arranca igual, que es lo mínimo que se le puede pedir a un renombre.
     groq: {
-      apiKey: v.GROQ_API_KEY,
-      baseUrl: v.GROQ_BASE_URL,
-      modeloClasificador: v.GROQ_MODELO_CLASIFICADOR,
-      modeloExtractor: v.GROQ_MODELO_EXTRACTOR,
-      modeloTranscriptor: v.GROQ_MODELO_TRANSCRIPTOR,
+      proveedor: v.LLM_PROVEEDOR,
+      apiKey: v.LLM_API_KEY || v.GROQ_API_KEY,
+      baseUrl: v.LLM_BASE_URL || v.GROQ_BASE_URL,
+      modeloClasificador: v.LLM_MODELO_CLASIFICADOR || v.GROQ_MODELO_CLASIFICADOR,
+      modeloExtractor: v.LLM_MODELO_EXTRACTOR || v.GROQ_MODELO_EXTRACTOR,
+      modeloTranscriptor: v.LLM_MODELO_TRANSCRIPTOR || v.GROQ_MODELO_TRANSCRIPTOR,
+    },
+
+    // El oído puede ir por su cuenta: si no se dice nada, va con el cerebro.
+    voz: {
+      apiKey: v.VOZ_API_KEY || v.LLM_API_KEY || v.GROQ_API_KEY,
+      baseUrl: v.VOZ_BASE_URL || v.LLM_BASE_URL || v.GROQ_BASE_URL,
+      modelo: v.VOZ_MODELO || v.LLM_MODELO_TRANSCRIPTOR || v.GROQ_MODELO_TRANSCRIPTOR,
     },
 
     ffmpeg: v.FFMPEG_RUTA,

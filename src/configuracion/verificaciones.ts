@@ -1,4 +1,4 @@
-import { elegirModelos, type Eleccion } from './modelos.ts'
+import { elegirModelos, type Eleccion, type Preferencias } from './modelos.ts'
 
 /**
  * Probar cada credencial en el momento de pegarla.
@@ -59,43 +59,69 @@ interface CatalogoGroq {
   error?: { message?: string }
 }
 
-export async function probarGroq(
+/**
+ * Preguntarle al proveedor qué modelos tiene, y elegir de esa lista.
+ *
+ * Sirve para cualquiera que hable la API de OpenAI, que es toda la gracia
+ * de que el puerto exista. Y aquí muere el riesgo abierto nº2 del spec:
+ * los identificadores de modelo no se asumen —cambian— se leen del
+ * catálogo vigente en el momento de configurar.
+ */
+export async function probarProveedor(
   apiKey: string,
   baseUrl: string,
-  buscar: Buscar = fetch
+  opciones: { nombre?: string; preferidos?: Preferencias; buscar?: Buscar } = {}
 ): Promise<Prueba & { eleccion?: Eleccion }> {
-  if (!apiKey.trim()) return falla('Pega primero la clave.')
+  const buscar = opciones.buscar ?? fetch
+  const quien = opciones.nombre ?? 'el proveedor'
+  const url = baseUrl.trim().replace(/\/+$/, '')
+
+  if (!url) return falla('Falta la dirección del proveedor.')
+  // Un modelo que corre en la propia laptop no pide clave, y exigirla
+  // dejaría fuera justo la opción de no mandar nada a internet.
+  const esLocal = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(url)
+  if (!apiKey.trim() && !esLocal) return falla('Pega primero la clave.')
 
   return intentar(async () => {
-    const r = await buscar(`${baseUrl.replace(/\/+$/, '')}/models`, {
-      headers: { authorization: `Bearer ${apiKey.trim()}` },
+    const r = await buscar(`${url}/models`, {
+      headers: apiKey.trim() ? { authorization: `Bearer ${apiKey.trim()}` } : {},
     })
     const cuerpo = (await r.json().catch(() => ({}))) as CatalogoGroq
 
-    if (r.status === 401) return falla('Esa clave no vale. Genera otra en console.groq.com.')
-    if (!r.ok) return falla(cuerpo.error?.message ?? `Groq respondió ${r.status}`)
+    if (r.status === 401 || r.status === 403) {
+      return falla(`${quien} no acepta esa clave. Genera otra y vuelve a intentar.`)
+    }
+    if (r.status === 404) {
+      return falla(`Ahí no hay una API de este tipo. Revisa la dirección: suele acabar en /v1.`)
+    }
+    if (!r.ok) return falla(cuerpo.error?.message ?? `${quien} respondió ${r.status}`)
 
     const ids = (cuerpo.data ?? []).map((m) => m.id).filter((x): x is string => Boolean(x))
-    if (ids.length === 0) return falla('Groq no devolvió ningún modelo.')
+    if (ids.length === 0) return falla(`${quien} no devolvió ningún modelo.`)
 
-    // Aquí muere el riesgo abierto nº2 del spec: los identificadores no se
-    // asumen, se leen del catálogo vigente y se eligen de ahí.
-    const eleccion = elegirModelos(ids)
+    const eleccion = elegirModelos(ids, opciones.preferidos ?? {})
 
+    const oye = eleccion.transcriptor
+      ? ` y ${eleccion.transcriptor} para oír`
+      : ''
     return {
       ok: true,
-      mensaje: `${ids.length} modelos. Elegí ${eleccion.extractor} para leer y ${eleccion.transcriptor} para oír.`,
+      mensaje: `${ids.length} modelos. Elegí ${eleccion.extractor} para leer${oye}.`,
       avisos: eleccion.avisos,
       eleccion,
       guardar: {
-        GROQ_API_KEY: apiKey.trim(),
-        GROQ_BASE_URL: baseUrl.replace(/\/+$/, ''),
-        GROQ_MODELO_CLASIFICADOR: eleccion.clasificador,
-        GROQ_MODELO_EXTRACTOR: eleccion.extractor,
-        GROQ_MODELO_TRANSCRIPTOR: eleccion.transcriptor,
+        LLM_API_KEY: apiKey.trim(),
+        LLM_BASE_URL: url,
+        LLM_MODELO_CLASIFICADOR: eleccion.clasificador,
+        LLM_MODELO_EXTRACTOR: eleccion.extractor,
+        // Sólo si este proveedor sabe oír. Si no, se deja lo que hubiera:
+        // borrarlo dejaría muda a la asistente por cambiar de cerebro.
+        ...(eleccion.transcriptor
+          ? { LLM_MODELO_TRANSCRIPTOR: eleccion.transcriptor }
+          : {}),
       },
     }
-  }, (e) => falla(`No se pudo hablar con Groq: ${porque(e)}`))
+  }, (e) => falla(`No se pudo hablar con ${quien}: ${porque(e)}`))
 }
 
 // ── Telegram ──────────────────────────────────────────────────

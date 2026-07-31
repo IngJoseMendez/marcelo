@@ -7,7 +7,7 @@ import { canjearCodigo, cuentaDelIdToken, urlDeConsentimiento } from '../src/con
 import { urlEnSalida } from '../src/configuracion/tunel.ts'
 import { crearEnlacePublico } from '../src/configuracion/enlace.ts'
 import { publicarVariables, redesplegar, variablesDeLaApp } from '../src/configuracion/vercel.ts'
-import { esperarChat, probarBase, probarGroq, probarTelegram } from '../src/configuracion/verificaciones.ts'
+import { esperarChat, probarBase, probarProveedor, probarTelegram } from '../src/configuracion/verificaciones.ts'
 
 /** Un `fetch` de mentira: guarda lo que le piden y devuelve lo guionado. */
 function buscarFalso(respuestas: Array<{ estado?: number; cuerpo: unknown }>) {
@@ -78,10 +78,9 @@ test('un valor con espacios sale entrecomillado, y vuelve igual al leerlo', () =
 
 const MINIMO = {
   DATABASE_URL: 'postgres://a:b@localhost:5433/c',
-  GROQ_API_KEY: 'gsk',
-  GROQ_MODELO_CLASIFICADOR: 'a',
-  GROQ_MODELO_EXTRACTOR: 'b',
-  GROQ_MODELO_TRANSCRIPTOR: 'c',
+  LLM_API_KEY: 'gsk',
+  LLM_MODELO_CLASIFICADOR: 'a',
+  LLM_MODELO_EXTRACTOR: 'b',
 }
 
 test('sin ninguna fuente de correo no arranca, por completo que esté lo demás', () => {
@@ -130,16 +129,16 @@ test('la página recuerda lo puesto, pero nunca le devuelven los secretos', () =
   const r = valoresRecordados({
     DATABASE_URL: 'postgres://x', APP_URL: 'https://app.test',
     GOOGLE_CLIENT_ID: 'publico.apps.googleusercontent.com',
-    GOOGLE_CLIENT_SECRET: 'GOCSPX-secreto', GROQ_API_KEY: 'gsk_secreto',
+    GOOGLE_CLIENT_SECRET: 'GOCSPX-secreto', LLM_API_KEY: 'gsk_secreto',
   })
 
   assert.equal(r.valores.APP_URL, 'https://app.test')
   assert.equal(r.valores.GOOGLE_CLIENT_ID, 'publico.apps.googleusercontent.com')
   assert.equal(r.valores.GOOGLE_CLIENT_SECRET, undefined)
-  assert.equal(r.valores.GROQ_API_KEY, undefined)
+  assert.equal(r.valores.LLM_API_KEY, undefined)
   // Un campo que ya está bien no tiene por qué volver a viajar: la página
   // sólo dice «ya guardado», y vacío significa «déjalo como está».
-  assert.deepEqual(r.yaGuardados.sort(), ['GOOGLE_CLIENT_SECRET', 'GROQ_API_KEY'])
+  assert.deepEqual(r.yaGuardados.sort(), ['GOOGLE_CLIENT_SECRET', 'LLM_API_KEY'])
 })
 
 // ── elegir modelos del catálogo vivo ────────────────────────────
@@ -178,7 +177,7 @@ test('sin un Whisper grande avisa: con acento costeño, uno pequeño inventa', (
   const e = elegirModelos(['llama-3.3-70b-versatile'])
 
   assert.equal(e.transcriptor, '')
-  assert.match(e.avisos.join(' '), /notas de voz no se transcriben/)
+  assert.match(e.avisos.join(' '), /no transcribe audio/)
 })
 
 test('sin modelo pequeño usa el bueno, pero lo dice', () => {
@@ -411,22 +410,23 @@ test('con variables puestas pero sin gancho, lo dice: es la trampa clásica', as
 test('probar Groq elige los modelos y devuelve lo que hay que guardar', async () => {
   const { buscar } = buscarFalso([{ cuerpo: { data: CATALOGO.map((id) => ({ id })) } }])
 
-  const r = await probarGroq('gsk_1', 'https://api.groq.com/openai/v1', buscar)
+  const r = await probarProveedor('gsk_1', 'https://api.groq.com/openai/v1', { buscar })
 
   assert.equal(r.ok, true)
-  assert.equal(r.guardar!.GROQ_MODELO_EXTRACTOR, 'llama-3.3-70b-versatile')
-  assert.equal(r.guardar!.GROQ_MODELO_TRANSCRIPTOR, 'whisper-large-v3')
-  assert.equal(r.guardar!.GROQ_API_KEY, 'gsk_1',
+  assert.equal(r.guardar!.LLM_MODELO_EXTRACTOR, 'llama-3.3-70b-versatile')
+  assert.equal(r.guardar!.LLM_MODELO_TRANSCRIPTOR, 'whisper-large-v3')
+  assert.equal(r.guardar!.LLM_API_KEY, 'gsk_1',
     'nadie escribe un identificador de modelo a mano')
 })
 
 test('una clave mala de Groq dice qué hacer, no un número', async () => {
   const { buscar } = buscarFalso([{ estado: 401, cuerpo: {} }])
 
-  const r = await probarGroq('mala', 'https://api.groq.com/openai/v1', buscar)
+  const r = await probarProveedor('mala', 'https://api.groq.com/openai/v1', { nombre: 'Groq', buscar })
 
   assert.equal(r.ok, false)
-  assert.match(r.mensaje, /console\.groq\.com/)
+  assert.match(r.mensaje, /Groq no acepta esa clave/,
+    'con el nombre del proveedor, que ya no siempre es Groq')
 })
 
 test('probar el bot devuelve su nombre y lo guarda', async () => {
