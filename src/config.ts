@@ -24,8 +24,16 @@ const Esquema = z.object({
   MS_TENANT_ID: z.string().default('common'),
   MS_REFRESH_TOKEN: z.string().default(''),
 
+  // El canal de control. Sin token no hay bot, y sin bot no hay resumen.
+  TELEGRAM_BOT_TOKEN: z.string().default(''),
+  // El único chat que puede darle órdenes. Si está vacío, el bot contesta
+  // a quien le escriba con el número de su chat y no hace nada más.
+  TELEGRAM_CHAT_ID: z.string().default(''),
+
   // Lo que consume la app. Sin token, la API no abre.
   API_TOKEN: z.string().default(''),
+  // Para el botón «Ver detalle» del resumen. Sin ella, no se ofrece.
+  APP_URL: z.string().default(''),
   JORNADA_DESDE: z.string().regex(/^\d{2}:\d{2}$/).default('07:00'),
   JORNADA_HASTA: z.string().regex(/^\d{2}:\d{2}$/).default('22:00'),
 
@@ -71,7 +79,13 @@ export function cargarConfig(env: Record<string, string | undefined>) {
       refreshToken: v.MS_REFRESH_TOKEN,
     },
 
+    telegram: {
+      token: v.TELEGRAM_BOT_TOKEN.trim(),
+      chatId: v.TELEGRAM_CHAT_ID.trim(),
+    },
+
     api: { token: v.API_TOKEN },
+    urlApp: v.APP_URL.trim(),
 
     // Ventana de trabajo: fuera de ella el tiempo libre no cuenta como hueco.
     // Sin esto, «tienes 9 horas libres» incluiría la madrugada.

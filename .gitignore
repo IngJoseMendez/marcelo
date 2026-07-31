@@ -21,6 +21,7 @@ coverage/
 Thumbs.db
 .vscode/
 .idea/
+.claude/settings.local.json
 
 respaldos/
 *.dump

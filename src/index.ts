@@ -25,6 +25,9 @@ import { crearServicioCronica } from './servicios/cronica.ts'
 import { crearServicioAgenda } from './servicios/agendar.ts'
 import { crearServicioDeshacer } from './servicios/deshacer.ts'
 import { crearServicioInstruccion } from './servicios/instruccion.ts'
+import { crearServicioResumen } from './servicios/resumen.ts'
+import { crearServicioConversacion } from './servicios/conversacion.ts'
+import { crearCanalTelegram } from './adaptadores/telegram.ts'
 import { crearClasificador } from './pipeline/clasificador.ts'
 import { crearExtractor } from './pipeline/extractor.ts'
 import { crearDesempate } from './pipeline/desempate.ts'
@@ -92,6 +95,13 @@ const llm = new ProveedorGroq(config.groq.apiKey, config.groq.baseUrl)
 const cola = crearRepoCola(db)
 const reloj = new RelojReal(config.zonaHoraria)
 
+// Uno solo para los dos canales: la app y Telegram oyen con el mismo oído.
+const transcriptor = config.groq.modeloTranscriptor
+  ? new TranscriptorGroq(
+      config.groq.apiKey, config.groq.baseUrl,
+      config.groq.modeloTranscriptor, config.ffmpeg)
+  : undefined
+
 const repoCompromisos = crearRepoCompromisos(db)
 const repoAcciones = crearRepoAcciones(db)
 const repoIntenciones = crearRepoIntenciones(db)
@@ -129,6 +139,26 @@ const procesador = crearProcesador({
 const sync = crearSincronizacion(db, cola)
 const porCuenta = new Map(conectadas.map((c) => [c.cuentaId, c]))
 
+// ── El canal de control ───────────────────────────────────────
+// Se arma antes de drenar la cola porque el pipeline ya puede tener algo
+// que avisar en la primera tanda, y porque el bot se construye en dos
+// tiempos: primero por dónde hablar, y al final con qué contestar.
+const cronica = crearServicioCronica(db, config.zonaHoraria)
+
+const canal = config.telegram.token
+  ? crearCanalTelegram({
+      token: config.telegram.token,
+      chatId: config.telegram.chatId,
+      registro: log,
+    })
+  : null
+
+const resumen = canal
+  ? crearServicioResumen({
+      reloj, cronica, notificador: canal.notificador, urlApp: config.urlApp,
+    })
+  : null
+
 async function drenarCola(): Promise<void> {
   await recargarReglas()
   for (const item of await cola.tomarPendientes(10)) {
@@ -142,6 +172,16 @@ async function drenarCola(): Promise<void> {
       const r = await procesador.procesar(correo, cuenta.proveedor)
       log.info({ messageId: item.messageId, proveedor: cuenta.proveedor, ...r },
         'correo procesado')
+
+      // La otra mitad de la política: lo que decidió «actuar y avisar»
+      // sale ahora mismo, y lo que decidió «actuar callada» espera al
+      // resumen de las 21:00. Que el aviso falle no puede desandar lo
+      // que ya se hizo ni dejar el correo sin marcar.
+      if (resumen && r.decision === 'actuar_y_avisar' && r.accionId !== null) {
+        await resumen.avisar(r.accionId)
+          .catch((e) => log.error({ err: e, accionId: r.accionId }, 'no se pudo avisar'))
+      }
+
       await cola.marcarListo(item.id)
     } catch (e) {
       log.error({ err: e, messageId: item.messageId }, 'fallo procesando')
@@ -194,6 +234,13 @@ const instruccion = crearServicioInstruccion({
   calendarId: config.google.calendarId,
 })
 
+// Telegram y la app son dos entradas del mismo intérprete: lo único que
+// cambia es por dónde vuelve la respuesta.
+canal?.conectar(crearServicioConversacion({
+  instruccion, deshacer, transcriptor, resumen: resumen ?? undefined,
+  canal: 'telegram',
+}))
+
 const app = crearServidor({
   db,
   modoSombra: config.modoSombra,
@@ -204,18 +251,14 @@ const app = crearServidor({
     reloj,
     modoSombra: config.modoSombra,
     jornada,
-    cronica: crearServicioCronica(db, config.zonaHoraria),
+    cronica,
     agenda: crearServicioAgenda({
       reloj, calendario, repoAcciones, repoIntenciones,
       calendarId: config.google.calendarId,
     }),
     deshacer,
     instruccion,
-    transcriptor: config.groq.modeloTranscriptor
-      ? new TranscriptorGroq(
-          config.groq.apiKey, config.groq.baseUrl,
-          config.groq.modeloTranscriptor, config.ffmpeg)
-      : undefined,
+    transcriptor,
     // Derivado del token de servicio: no hace falta otro secreto que
     // alguien tenga que acordarse de poner.
     secretoVoz: createHmac('sha256', config.api.token || 'sin-token')
@@ -228,10 +271,26 @@ const app = crearServidor({
 if (!config.api.token) {
   log.warn('API_TOKEN vacío: la app no podrá conectarse hasta que lo configures')
 }
+if (!canal) {
+  log.warn('TELEGRAM_BOT_TOKEN vacío: sin canal de Telegram y sin resumen diario')
+} else if (!config.telegram.chatId) {
+  log.warn('TELEGRAM_CHAT_ID vacío: escríbele al bot y te dirá qué número poner')
+}
 
 cron.schedule('* * * * *', () => { void drenarCola() })
 // Red de seguridad: si el push falla en silencio, esto lo recoge igual.
 cron.schedule('*/5 * * * *', () => { void ponerseAlDiaTodas() })
+
+// El resumen de las 21:00, en hora de Bogotá. Si no hizo nada, no manda
+// nada: una asistente que escribe a diario «hoy no pasó nada» se vuelve
+// ruido en una semana.
+if (resumen) {
+  cron.schedule('0 21 * * *', () => {
+    void resumen.enviar()
+      .then((r) => log.info({ enviado: r.enviado }, 'resumen diario'))
+      .catch((e) => log.error({ err: e }, 'no se pudo mandar el resumen'))
+  }, { timezone: config.zonaHoraria })
+}
 
 // El watch de Gmail caduca a los 7 días y la suscripción de Graph a los 3.
 // Si esto falla, el sistema deja de recibir avisos SIN dar ningún error.
@@ -247,6 +306,21 @@ cron.schedule('0 3 * * *', () => {
 }, { timezone: config.zonaHoraria })
 
 await app.listen({ port: config.puerto, host: '0.0.0.0' })
+
+// Long polling: sale a preguntar en vez de esperar a que le toquen, que es
+// lo único que funciona sin IP pública.
+canal?.arrancar()
+
+// Sin `allSettled` esto se cuelga: con `canal` en null, el encadenamiento
+// opcional se lleva por delante también el `.finally`, y nadie sale nunca.
+for (const señal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(señal, () => {
+    log.info({ señal }, 'cerrando')
+    void Promise.allSettled([canal?.detener(), app.close()])
+      .finally(() => process.exit(0))
+  })
+}
+
 log.info(
   { puerto: config.puerto, modoSombra: config.modoSombra, fuentes },
   config.modoSombra

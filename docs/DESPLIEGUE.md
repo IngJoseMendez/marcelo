@@ -72,8 +72,19 @@ apuesta permanente: si la laptop muere, el mismo compose levanta en un VPS de
 
 ### 1.4 Telegram
 
-1. Habla con **@BotFather** → `/newbot` → guarda el token.
-2. Escríbele al bot desde el celular de Marcelo para obtener su `chat_id`.
+1. Habla con **@BotFather** → `/newbot` → guarda el token en
+   `TELEGRAM_BOT_TOKEN`.
+2. Deja `TELEGRAM_CHAT_ID` vacío, arranca el backend y escríbele «hola» al bot
+   desde el celular de Marcelo: contesta con el número que va en esa variable.
+   Ponlo y reinicia.
+
+Mientras `TELEGRAM_CHAT_ID` esté vacío el bot no obedece a nadie, y una vez
+puesto ignora en silencio a cualquier otro chat. Es el único candado que hay:
+quien conozca el token del bot puede escribirle, pero no es Marcelo.
+
+El bot trabaja por **long polling** — sale a preguntar en vez de esperar a que
+le toquen— así que no necesita IP pública, ni webhook, ni un puerto abierto.
+El túnel del paso 2.3 es sólo para el push de Gmail y para la app.
 
 ---
 
@@ -217,14 +228,22 @@ npm run dev                          # con API_BASE=http://localhost:4000
 
 ## 4. Verificar que quedó bien
 
-- [ ] `npm test` pasa completo (200 pruebas)
+- [ ] `npm test` pasa completo (242 pruebas)
 - [ ] `GROQ_MODELO_TRANSCRIPTOR` puesto (si no, el micrófono de la app responde
-      503 y lo dice); y `FFMPEG_RUTA` si quieres que normalice el volumen
+      503 y lo dice, y el bot contesta que todavía no sabe oír); y `FFMPEG_RUTA`
+      si quieres que normalice el volumen
+- [ ] Le escribes al bot «¿qué me queda hoy?» y contesta
+- [ ] Le mandas una **nota de voz** diciendo «cancélame X del viernes»: responde
+      con lo que oyó, lo que entendió y dos botones. **Sin tocar nada hasta que
+      toques Confirmar** — eso es la política de la voz funcionando
 - [ ] `curl https://api.tudominio.com/salud` responde desde fuera de la casa
 - [ ] `curl -H "Authorization: Bearer $API_TOKEN" https://api.tudominio.com/api/jornada`
       devuelve el día — y sin la cabecera responde 401
 - [ ] Llega un correo de prueba y aparece una fila en `acciones` con `estado='sombra'`
 - [ ] **Google Calendar NO cambió** — eso confirma que la sombra funciona
+- [ ] A las 21:00 llega el resumen **sólo si ella hizo algo por su cuenta**. Un
+      día en que no tocó nada no debe llegar nada: si llega un «hoy no pasó
+      nada», está mal
 - [ ] Apagar la laptop 30 minutos, prenderla: los correos de ese rato se procesan solos
 - [ ] Cortar el internet y devolverlo: se pone al día sin duplicar nada
 
