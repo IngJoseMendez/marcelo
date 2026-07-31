@@ -155,6 +155,29 @@ button.suave { background:transparent; color:var(--lumen); border:1px solid var(
   * { animation:none !important; transition:none !important; }
 }
 
+.requisito {
+  display:flex; align-items:flex-start; gap:14px; padding:14px 0;
+  border-bottom:1px solid var(--borde);
+}
+.requisito:last-child { border-bottom:0; }
+.req-icono { font-size:18px; line-height:1.4; flex:none; width:24px; }
+.req-texto { flex:1; min-width:0; }
+.req-op {
+  font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--tinta-suave); border:1px solid var(--borde);
+  border-radius:99px; padding:1px 7px; vertical-align:1px;
+}
+.req-porque { color:var(--tinta-suave); font-size:14px; margin-top:2px; }
+.req-estado { font-size:13px; margin-top:4px; color:var(--tinta-suave); }
+.r-listo .req-estado { color:var(--si); }
+.r-falta .req-estado, .r-viejo .req-estado { color:var(--ojo); }
+.r-apagado .req-estado { color:var(--ojo); }
+.req-boton { margin:0; flex:none; align-self:center; padding:8px 16px; font-size:14px; }
+a.req-boton {
+  border:1px solid var(--borde); border-radius:12px; color:var(--lumen);
+  text-decoration:none; padding:8px 16px; font-weight:600; font-size:14px;
+}
+
 .final {
   margin-top:26px; padding:26px; border-radius:var(--radio); text-align:center;
   background:linear-gradient(135deg,color-mix(in srgb,var(--lumen) 14%,var(--papel)),var(--papel));
@@ -288,8 +311,71 @@ $$('.demo').forEach(function (demo) {
   }, 1900);
 });
 
+// ── requisitos de la máquina ──────────────────────────────────
+var instalando = false;
+
+function pintarRequisitos(r) {
+  var lista = $('#requisitos-lista');
+  var caja = $('[data-bloque="requisitos"]');
+  caja.dataset.salud = r.listo ? (r.faltan ? 'parcial' : 'listo') : 'pendiente';
+  $('.detalle', caja).textContent = r.listo
+    ? (r.faltan ? 'lo esencial está' : 'todo puesto')
+    : 'falta lo esencial';
+
+  instalando = false;
+  lista.innerHTML = '';
+  r.requisitos.forEach(function (q) {
+    var marcha = (r.instalando || {})[q.id];
+    if (marcha && !marcha.hecho) instalando = true;
+
+    var fila = document.createElement('div');
+    fila.className = 'requisito r-' + q.salud;
+
+    var icono = q.salud === 'listo' ? '✅' : q.salud === 'apagado' ? '🟡' : q.salud === 'viejo' ? '🟠' : '⬜';
+    var cuerpo = '<div class="req-icono">' + icono + '</div><div class="req-texto">'
+      + '<b>' + q.nombre + '</b>'
+      + (q.imprescindible ? '' : ' <span class="req-op">opcional</span>')
+      + '<div class="req-porque">' + q.porque + '</div>'
+      + '<div class="req-estado">' + (marcha && !marcha.hecho ? 'instalando… ' + (marcha.ultima || '') : q.mensaje) + '</div>'
+      + '</div>';
+
+    if (q.salud !== 'listo' && q.instalable && !(marcha && !marcha.hecho)) {
+      cuerpo += '<button class="accion req-boton" data-instalar="' + q.id + '">Instalar</button>';
+    } else if (q.salud !== 'listo' && !q.instalable) {
+      cuerpo += '<a class="fuera req-boton" href="' + q.manual + '" target="_blank" rel="noreferrer">Cómo</a>';
+    }
+
+    fila.innerHTML = cuerpo;
+    lista.appendChild(fila);
+  });
+
+  $('#requisitos-gestor').textContent = r.gestor
+    ? 'Instalo con ' + r.gestor + ', el gestor de paquetes de tu sistema.'
+    : 'En este sistema no puedo instalar solo: te dejo el enlace de cada uno.';
+}
+
+async function refrescarRequisitos() {
+  var r = await fetch('/api/requisitos');
+  pintarRequisitos(await r.json());
+}
+
+document.addEventListener('click', async function (e) {
+  var boton = e.target.closest('[data-instalar]');
+  if (!boton) return;
+  var id = boton.dataset.instalar;
+  if (!confirm('Voy a instalar ' + id + ' en esta máquina. Puede tardar varios minutos. ¿Sigo?')) return;
+  boton.disabled = true;
+  boton.textContent = 'lanzando…';
+  var r = await pedir('/api/requisitos/instalar', { id: id });
+  decir($('[data-bloque="requisitos"]'), r);
+  await refrescarRequisitos();
+});
+
 refrescar();
+refrescarRequisitos();
 setInterval(refrescar, 15000);
+// Mientras algo se instala hay que mirar más seguido, para poder contarlo.
+setInterval(function () { refrescarRequisitos(); }, 4000);
 `
 
 const FLECHA = '<span class="flecha">›</span>'
@@ -323,6 +409,15 @@ function bloque(id: string, titulo: string, cuerpo: string): string {
 }
 
 export function paginaConfiguracion(d: DatosPagina): string {
+  const requisitos = bloque('requisitos', 'Lo que necesita esta máquina', `
+<p class="sub">Antes de nada, miro qué hay instalado y qué no. Lo que falte te lo
+pongo yo desde aquí — <b>pero te pregunto cada vez</b>: instalar cosas en tu
+máquina no debería pasar por descuido.</p>
+<div id="requisitos-lista"></div>
+<p class="detalle" id="requisitos-gestor" style="margin-top:14px"></p>
+<div class="aviso ojo">Postgres <b>no</b> se instala aparte: vive dentro de Docker,
+que es lo que instalo arriba. Y Python no hace falta para nada en este proyecto.</div>`)
+
   const base = bloque('base', 'Base de datos', `
 <p class="sub">Postgres corre en Docker, en esta misma laptop. Si ya levantaste
 <code class="mono">docker compose up -d</code>, esto es sólo darle a Probar.</p>
@@ -434,19 +529,45 @@ publicar sola. Con un dominio propio en Cloudflare la dirección sería fija.</d
 <button class="accion" data-ruta="/api/tunel" data-esperando="levantando el túnel…">Abrir túnel</button>`)
 
   const app = bloque('app', 'La app en Vercel', `
-<p class="sub">Lo último. Aquí genero los secretos y <b>se los escribo a Vercel yo
-misma</b>, para que no tengas que copiar nada a mano.</p>
+<p class="sub">Lo último, y lo que hace que no tengas que entrar nunca al panel de
+Vercel: me das permiso una vez y <b>yo le escribo la configuración por ti</b>, hoy
+y cada vez que la dirección del túnel cambie.</p>
+
+<div class="aviso ojo">La página ya desplegada <b>no sabe</b> dónde está esta
+laptop. Lo que hago aquí es decírselo. Sin este paso, la app abre pero dice
+«sin conexión» en todas las pantallas.</div>
+
 <ol class="pasos">
-  <li>Dale a <b>Generar secretos</b>. Salen el token de servicio, tu código de entrada y la firma de la sesión.</li>
-  <li>Saca un token en <a class="fuera" href="https://vercel.com/account/settings/tokens" target="_blank" rel="noreferrer">vercel.com → Account Settings → Tokens</a> y pégalo.</li>
-  <li>Escribe el <b>nombre del proyecto</b> tal como sale en Vercel.</li>
-  <li>En tu proyecto → <b>Settings → Git → Deploy Hooks</b>, crea uno para <code class="mono">main</code> y pega la URL. Sin esto las variables se guardan pero la app sigue con las de antes.</li>
-  <li><b>Publicar en Vercel</b>. Escribo las cuatro variables y disparo el redespliegue.</li>
+  <li><b>Genera los secretos.</b> Salen cuatro: el token con el que la app le habla
+    a esta laptop, tu código para entrar, la firma de la sesión y la clave del
+    respaldo. Esa última <b>cópiala a otro sitio</b> — si se muere el disco, sin
+    ella el respaldo no se abre.</li>
+
+  <li><b>El token de Vercel.</b> Entra a
+    <a class="fuera" href="https://vercel.com/account/settings/tokens" target="_blank" rel="noreferrer">vercel.com/account/settings/tokens</a>
+    → <b>Create Token</b>. Ponle cualquier nombre, ámbito tu cuenta, caducidad
+    <b>No Expiration</b> (si caduca, dejo de poder actualizarla sola). Cópialo
+    <b>ya</b>: no se vuelve a mostrar.</li>
+
+  <li><b>El nombre del proyecto.</b> Es el que sale en tu panel de Vercel, el mismo
+    de la URL <code class="mono">vercel.com/&lt;tu-usuario&gt;/<b>este-nombre</b></code>.
+    No es la dirección de la app, es el nombre a secas.</li>
+
+  <li><b>El gancho de despliegue.</b> En tu proyecto →
+    <b>Settings → Git → Deploy Hooks</b> → nombre cualquiera, rama
+    <code class="mono">main</code> → <b>Create Hook</b> → copia la URL que aparece.
+    <span class="detalle">Hace falta porque Vercel sólo aplica las variables al
+    desplegar. Sin el gancho, se guardan y la app sigue con las de ayer — es la
+    trampa clásica de esto.</span></li>
+
+  <li>Pon también la <b>dirección de tu app</b> (la de Vercel), y dale a
+    <b>Publicar en Vercel</b>. Escribo las cuatro variables en los tres entornos y
+    disparo el redespliegue.</li>
 </ol>
 ${demo([
-  ['Account Settings', '→ Tokens → Create'],
-  ['Proyecto → Settings', '→ Git → Deploy Hooks'],
-  ['Publicar', '→ yo escribo las variables y redesplego'],
+  ['vercel.com → Account Settings', '→ Tokens → Create Token'],
+  ['Tu proyecto → Settings', '→ Git → Deploy Hooks → Create Hook'],
+  ['Aquí abajo', '→ pega los tres y dale a Publicar'],
 ])}
 <button class="accion suave" data-ruta="/api/generar" data-esperando="generando…">Generar secretos</button>
 <label for="API_TOKEN">Token de servicio (backend ↔ app)</label>
@@ -455,6 +576,8 @@ ${demo([
 <input type="text" id="CODIGO_ACCESO" name="CODIGO_ACCESO" class="mono" spellcheck="false">
 <label for="SECRETO_SESION">Firma de la sesión</label>
 <input type="text" id="SECRETO_SESION" name="SECRETO_SESION" class="mono" spellcheck="false">
+<label for="RESPALDO_CLAVE">Clave del respaldo — guárdala FUERA de esta laptop</label>
+<input type="text" id="RESPALDO_CLAVE" name="RESPALDO_CLAVE" class="mono" spellcheck="false">
 <label for="APP_URL">Dirección de la app en Vercel</label>
 <input type="text" id="APP_URL" name="APP_URL" class="mono" placeholder="https://algo.vercel.app" spellcheck="false">
 <label for="VERCEL_TOKEN">Token de Vercel</label>
@@ -486,6 +609,7 @@ ${demo([
     <p class="cuenta">cargando…</p>
   </header>
 
+  ${requisitos}
   ${base}
   ${groq}
   ${google}

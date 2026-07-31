@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { spawn } from 'node:child_process'
 import { readFile, writeFile, copyFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -12,6 +13,10 @@ import { esperarChat, probarBase, probarGroq, probarTelegram } from './verificac
 import { CLAVES, canjearCodigo, urlDeConsentimiento, type Proveedor } from './oauth.ts'
 import { abrirTunel, type Tunel } from './tunel.ts'
 import { publicarVariables, redesplegar, variablesDeLaApp } from './vercel.ts'
+import {
+  comandoDeInstalacion, gestorDe, plataformaActual, porId, revisarRequisitos,
+  type Ejecutar,
+} from './requisitos.ts'
 
 /**
  * El asistente de configuración.
@@ -94,6 +99,88 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
     // Lo que él necesita para abrirla en el celular cuando todo esté listo.
     app: { url: env.APP_URL ?? '', codigo: env.CODIGO_ACCESO ?? '' },
   }))
+
+  // ── requisitos de la máquina ────────────────────────────────
+
+  const plataforma = plataformaActual(process.platform)
+
+  /** Correr un programa y quedarse con lo que diga, sin que nada reviente. */
+  const correr: Ejecutar = (programa, argumentos) =>
+    new Promise((cumplir) => {
+      // `shell: true` en Windows porque winget, docker y cloudflared se
+      // instalan como .cmd y sin shell no se encuentran en el PATH.
+      const proceso = spawn(programa, argumentos, { shell: plataforma === 'windows' })
+      let salida = ''
+      const recoger = (t: Buffer) => { salida += t.toString() }
+      proceso.stdout?.on('data', recoger)
+      proceso.stderr?.on('data', recoger)
+      proceso.on('error', () => cumplir({ ok: false, salida }))
+      proceso.on('close', (codigo) => cumplir({ ok: codigo === 0, salida }))
+    })
+
+  /**
+   * Instalar tarda minutos, así que no se espera dentro de la petición: se
+   * lanza, se contesta enseguida y la página va preguntando cómo va.
+   */
+  const instalaciones = new Map<string, { hecho: boolean; ok: boolean; lineas: string[] }>()
+
+  app.get('/api/requisitos', async () => ({
+    ...(await revisarRequisitos(correr, plataforma)),
+    plataforma,
+    gestor: gestorDe(plataforma),
+    instalando: Object.fromEntries(
+      [...instalaciones].map(([id, e]) => [id, {
+        hecho: e.hecho, ok: e.ok, ultima: e.lineas.at(-1) ?? '',
+      }])),
+  }))
+
+  app.post('/api/requisitos/instalar', async (req) => {
+    const { id = '' } = (req.body ?? {}) as Record<string, string>
+    const requisito = porId(id)
+    if (!requisito) return { ok: false, mensaje: 'No sé qué es eso.' }
+
+    const comando = comandoDeInstalacion(requisito, plataforma)
+    if (!comando) {
+      return {
+        ok: false,
+        mensaje: `En este sistema tengo que pedirte que lo instales tú: ${requisito.manual}`,
+      }
+    }
+
+    const enCurso = instalaciones.get(id)
+    if (enCurso && !enCurso.hecho) {
+      return { ok: true, mensaje: `Instalando ${requisito.nombre}… puede tardar varios minutos.` }
+    }
+
+    const estado = { hecho: false, ok: false, lineas: [] as string[] }
+    instalaciones.set(id, estado)
+
+    const proceso = spawn(comando.programa, comando.argumentos, {
+      shell: plataforma === 'windows',
+    })
+    const anotar = (t: Buffer) => {
+      // Sólo el último rato: winget escribe barras de progreso a chorros.
+      estado.lineas.push(...t.toString().split(/\r?\n/).filter((l) => l.trim()))
+      if (estado.lineas.length > 40) estado.lineas.splice(0, estado.lineas.length - 40)
+    }
+    proceso.stdout?.on('data', anotar)
+    proceso.stderr?.on('data', anotar)
+    proceso.on('error', (e) => {
+      estado.hecho = true
+      estado.lineas.push(String(e))
+      o.registro?.error({ err: e, id }, 'no se pudo lanzar el instalador')
+    })
+    proceso.on('close', (codigo) => {
+      estado.hecho = true
+      estado.ok = codigo === 0
+      o.registro?.info({ id, codigo }, 'instalación terminada')
+    })
+
+    return {
+      ok: true,
+      mensaje: `Instalando ${requisito.nombre}. Tarda varios minutos; te voy diciendo.`,
+    }
+  })
 
   // ── probar cada pieza ───────────────────────────────────────
 

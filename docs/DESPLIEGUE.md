@@ -2,10 +2,8 @@
 
 > **Atajo: no hagas esto a mano.**
 >
-> ```bash
-> npm install
-> npm start
-> ```
+> **Doble clic en `ARRANCAR.cmd`.** Eso es todo. Si no hay Node, lo instala;
+> si faltan dependencias, las pone; y arranca.
 >
 > Si falta configuración, en vez de caerse abre un **asistente** y te dice a
 > qué dirección ir (`http://localhost:3210`). Ahí está todo lo de abajo en
@@ -13,6 +11,10 @@
 > contra el servicio de verdad** y se guarda lo que salga bien. Los modelos
 > de Groq, el número de chat de Telegram y los `refresh_token` de Google y
 > Outlook **no se escriben a mano** — salen de la propia prueba.
+>
+> El primer bloque mira **qué le falta a la máquina** —Docker, cloudflared,
+> ffmpeg— y te lo instala con un botón, preguntando cada vez. Postgres no se
+> instala aparte: vive dentro de Docker. Python no hace falta para nada.
 >
 > Para volver a abrirlo después: `npm run configurar`.
 >
@@ -252,7 +254,7 @@ npm run dev                          # con API_BASE=http://localhost:4000
 
 ## 4. Verificar que quedó bien
 
-- [ ] `npm test` pasa completo (298 pruebas)
+- [ ] `npm test` pasa completo (309 pruebas)
 - [ ] **Abre un respaldo antes de necesitarlo**: `npm run respaldo:abrir -- respaldos/<archivo>`.
       Un respaldo que nadie ha probado a abrir no es un respaldo
 - [ ] `RESPALDO_CLAVE` guardada FUERA de la laptop. Si se muere el disco y

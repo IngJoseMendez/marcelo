@@ -1,0 +1,57 @@
+@echo off
+setlocal
+cd /d "%~dp0"
+title Mi Segundo Cerebro
+
+rem ---------------------------------------------------------------
+rem  Doble clic aqui y ya.
+rem
+rem  Existe por el problema del huevo y la gallina: el asistente de
+rem  configuracion instala Docker, cloudflared y ffmpeg, pero el
+rem  asistente corre en Node, asi que Node no puede instalarse a si
+rem  mismo. Esto es lo unico que hace falta que alguien ejecute.
+rem ---------------------------------------------------------------
+
+echo.
+echo   Mi Segundo Cerebro
+echo   ==================
+echo.
+
+where node >nul 2>&1
+if errorlevel 1 (
+  echo   No tienes Node.js, que es donde corre la asistente.
+  echo   Lo instalo ahora. Tarda unos minutos.
+  echo.
+  winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements
+  echo.
+  echo   ------------------------------------------------------------
+  echo   Node instalado. CIERRA esta ventana y vuelve a abrir
+  echo   ARRANCAR.cmd: Windows necesita reabrir la consola para
+  echo   encontrarlo.
+  echo   ------------------------------------------------------------
+  echo.
+  pause
+  exit /b 0
+)
+
+if not exist "node_modules" (
+  echo   Preparando por primera vez. Esto tarda un par de minutos...
+  echo.
+  call npm install
+  if errorlevel 1 (
+    echo.
+    echo   Algo fallo preparando. Copia lo de arriba y mandaselo a Jose.
+    pause
+    exit /b 1
+  )
+  echo.
+)
+
+echo   Arrancando...
+echo.
+call npm start
+
+echo.
+echo   La asistente se cerro. Si no era lo que esperabas, copia lo de
+echo   arriba y mandaselo a Jose.
+pause
