@@ -1,20 +1,29 @@
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// A mano y no con `import.meta.dirname`: eso existe desde Node 20.11, y en un
-// Node anterior vale `undefined` en silencio. Entonces Next infiere la raíz
-// sola, encuentra el package-lock del backend un nivel arriba, decide que la
-// raíz del proyecto es el repo entero, y el despliegue se cae buscando un
-// `.next` que quedó en otro sitio. Esto funciona en cualquier Node con ESM.
 const aqui = dirname(fileURLToPath(import.meta.url))
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // El repo tiene dos package-lock (el backend y la app). Sin esto, el
-  // rastreo de archivos toma la raíz del repo y se lleva medio backend al
-  // despliegue.
-  outputFileTracingRoot: aqui,
+
+  // La RAÍZ DEL REPO, no esta carpeta.
+  //
+  // Esto no decide qué se despliega —eso lo deciden los imports— sino
+  // desde dónde se escriben las rutas de los archivos rastreados. Con
+  // «Root Directory = web» en Vercel, el builder clona el repo entero en
+  // /vercel/path0 y resuelve esas rutas contra ahí. Si el rastreo se
+  // enraíza en web/, Next escribe «.next/…», Vercel busca
+  // /vercel/path0/.next/… y el despliegue muere con:
+  //
+  //   ENOENT: lstat '/vercel/path0/.next/package.json'
+  //
+  // Enraizado en el repo, Next escribe «web/.next/…» y cuadra. Se pone
+  // explícito en vez de dejar que Next lo deduzca porque hay dos
+  // package-lock (el del backend y el de la app) y la deducción avisa por
+  // consola de que podría equivocarse.
+  outputFileTracingRoot: dirname(aqui),
+
   // La app no sirve imágenes remotas ni tipografías enlazadas: todo el peso
   // está en el HTML y el CSS. Una cabecera de más aquí no compra nada.
   poweredByHeader: false,
