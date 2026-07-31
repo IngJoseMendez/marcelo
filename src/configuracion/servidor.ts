@@ -17,6 +17,9 @@ import {
   comandoDeInstalacion, gestorDe, plataformaActual, porId, revisarRequisitos,
   type Ejecutar,
 } from './requisitos.ts'
+import {
+  comandoDeTarea, comandosDeVigilia, enPalabras, revisarVigilia,
+} from './vigilia.ts'
 
 /**
  * El asistente de configuración.
@@ -179,6 +182,73 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
     return {
       ok: true,
       mensaje: `Instalando ${requisito.nombre}. Tarda varios minutos; te voy diciendo.`,
+    }
+  })
+
+  // ── que no se duerma y que vuelva sola ──────────────────────
+
+  const carpeta = process.cwd()
+
+  app.get('/api/vigilia', async () => {
+    if (plataforma !== 'windows') {
+      return { soportado: false, dichos: ['Esto sólo lo sé arreglar en Windows.'], listo: true }
+    }
+    const estado = await revisarVigilia(correr)
+    return { soportado: true, ...estado, dichos: enPalabras(estado), carpeta }
+  })
+
+  app.post('/api/vigilia/despierta', async () => {
+    if (plataforma !== 'windows') {
+      return { ok: false, mensaje: 'Esto sólo lo sé hacer en Windows.' }
+    }
+    const fallos: string[] = []
+    for (const c of comandosDeVigilia()) {
+      const r = await correr(c.programa, c.argumentos)
+      // Los opcionales necesitan administrador y el resto funciona sin
+      // ellos: contarlos como fallo diría que no se hizo nada cuando sí.
+      if (!r.ok && !c.opcional) {
+        fallos.push(`${c.argumentos[1] ?? c.argumentos[0]}: ${r.salida.trim().slice(0, 120)}`)
+      }
+    }
+    if (fallos.length > 0) {
+      return {
+        ok: false,
+        mensaje: 'Windows no me dejó cambiar la energía. Cierra y abre ARRANCAR.cmd '
+          + 'con «Ejecutar como administrador» y vuelve a intentarlo.',
+        avisos: fallos.slice(0, 2),
+      }
+    }
+    return {
+      ok: true,
+      mensaje: 'Listo: enchufada no se duerme, y puedes cerrar la tapa sin apagarla.',
+      avisos: ['La pantalla sí se apaga a los 10 min. Eso no congela nada y cuida el panel.'],
+    }
+  })
+
+  app.post('/api/vigilia/arrancar-con-windows', async () => {
+    if (plataforma !== 'windows') {
+      return { ok: false, mensaje: 'Esto sólo lo sé hacer en Windows.' }
+    }
+    const c = comandoDeTarea(carpeta)
+    const r = await correr(c.programa, c.argumentos)
+    return r.ok
+      ? {
+          ok: true,
+          mensaje: 'Registrada. Cuando Windows arranque y entres a tu usuario, se abre sola.',
+          avisos: ['Para que funcione tras un reinicio de madrugada, Windows tiene que '
+            + 'entrar solo a tu usuario. El botón de abajo abre esa configuración.'],
+        }
+      : { ok: false, mensaje: `No pude registrarla: ${r.salida.trim().slice(0, 200)}` }
+  })
+
+  /** Abre el diálogo de Windows donde se activa el inicio de sesión automático. */
+  app.post('/api/vigilia/inicio-automatico', async () => {
+    if (plataforma !== 'windows') return { ok: false, mensaje: 'Sólo en Windows.' }
+    spawn('netplwiz', [], { shell: true, detached: true, stdio: 'ignore' }).unref()
+    return {
+      ok: true,
+      mensaje: 'Te abrí la ventana de Windows. Quita la casilla «Los usuarios deben '
+        + 'escribir su nombre y contraseña», dale a Aplicar y escribe tu contraseña.',
     }
   })
 
@@ -349,10 +419,11 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
     await guardar(nuevos)
     return {
       ok: true,
-      mensaje: 'Generados y guardados.',
+      mensaje: `Listo. Tu código para entrar a la app es ${nuevos.CODIGO_ACCESO}.`,
       rellenar: nuevos,
-      avisos: ['Copia la clave de respaldo a otro sitio (el gestor de contraseñas, un papel). '
-        + 'Si se muere la laptop, sin ella el respaldo no se puede abrir.'],
+      avisos: ['Ahora copia la clave del respaldo a otro sitio: al gestor de '
+        + 'contraseñas o a un papel. Si el disco se muere y se va con él, los '
+        + 'respaldos no se pueden abrir.'],
     }
   })
 
@@ -388,10 +459,12 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
 
   app.post('/api/reiniciar', async (_req, res) => {
     res.type('text/html; charset=utf-8')
-    // Bajo Docker Compose (`restart: unless-stopped`) esto vuelve solo. Fuera
-    // de Docker hay que correr `npm start` otra vez, y por eso se dice.
-    setTimeout(() => process.exit(0), 400)
-    return volver('Arrancando', 'Si corres con Docker vuelvo sola. Si no, lanza `npm start`.')
+    // El 7 es la señal para ARRANCAR.cmd: «no te mueras, vuelve a lanzarme».
+    // Sin un código aparte, salir para reiniciar y salir por un fallo se
+    // verían igual desde fuera, y habría que elegir entre reiniciar siempre
+    // —incluso en bucle con algo roto— o no reiniciar nunca.
+    setTimeout(() => process.exit(7), 400)
+    return volver('Arrancando', 'Vuelvo en unos segundos. No cierres la ventana negra.')
   })
 
   await app.listen({ port: puerto, host: '127.0.0.1' })

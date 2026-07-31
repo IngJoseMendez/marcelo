@@ -54,11 +54,32 @@ echo    Si la cierras, se apaga: deja de leer correo y de contestar
 echo    por Telegram. Puedes minimizarla sin problema.
 echo   ------------------------------------------------------------
 echo.
+
+:bucle
 echo   Arrancando...
 echo.
 call npm start
+set CODIGO=%errorlevel%
+
+rem  7 = el asistente pidio reiniciarse para aplicar la configuracion.
+if "%CODIGO%"=="7" (
+  echo.
+  echo   Reiniciando para aplicar lo que configuraste...
+  echo.
+  goto bucle
+)
+
+rem  Cualquier otro fallo: vuelve a intentarlo. Un servidor que se muere
+rem  por un error de red a las 3 de la manana y espera a que alguien lo
+rem  vea no es un servidor.
+if not "%CODIGO%"=="0" (
+  echo.
+  echo   Se cayo con codigo %CODIGO%. Lo vuelvo a intentar en 15 segundos.
+  echo   Para pararlo del todo: cierra esta ventana.
+  timeout /t 15 /nobreak >nul
+  goto bucle
+)
 
 echo.
-echo   La asistente se cerro. Si no era lo que esperabas, copia lo de
-echo   arriba y mandaselo a Jose.
+echo   La asistente se cerro sola. Copia lo de arriba y mandaselo a Jose.
 pause

@@ -155,6 +155,27 @@ button.suave { background:transparent; color:var(--lumen); border:1px solid var(
   * { animation:none !important; transition:none !important; }
 }
 
+/* Saber si algo se hace aquí o en la web del otro es la mitad de la confusión. */
+.donde {
+  display:inline-block; font-size:11px; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; border-radius:99px; padding:2px 9px;
+  margin:0 8px 4px 0; vertical-align:2px;
+}
+.donde.aqui { background:color-mix(in srgb,var(--lumen) 16%,transparent); color:var(--lumen); }
+.donde.vercel { background:color-mix(in srgb,var(--tinta) 10%,transparent); color:var(--tinta-suave); }
+
+details.tecnico {
+  margin:16px 0; padding:0 14px; border:1px solid var(--borde); border-radius:12px;
+  background:var(--lienzo);
+}
+details.tecnico > summary {
+  cursor:pointer; padding:12px 0; font-size:14px; color:var(--tinta-suave);
+  font-weight:600;
+}
+details.tecnico[open] > summary { border-bottom:1px solid var(--borde); }
+details.tecnico > label:first-of-type { margin-top:10px; }
+details.tecnico > input:last-child { margin-bottom:16px; }
+
 .requisito {
   display:flex; align-items:flex-start; gap:14px; padding:14px 0;
   border-bottom:1px solid var(--borde);
@@ -281,6 +302,9 @@ document.addEventListener('click', async function (e) {
     var respuesta = await pedir(boton.dataset.ruta, valores(caja));
     decir(caja, respuesta);
     if (respuesta.ir) { window.location.href = respuesta.ir; return; }
+    if (boton.dataset.ruta.indexOf('/vigilia') === 0 || boton.dataset.ruta.indexOf('/api/vigilia') === 0) {
+      await refrescarVigilia();
+    }
     if (respuesta.rellenar) {
       Object.keys(respuesta.rellenar).forEach(function (k) {
         var campo = $('input[name="' + k + '"]');
@@ -367,6 +391,16 @@ async function refrescarRequisitos() {
   pintarRequisitos(await r.json());
 }
 
+async function refrescarVigilia() {
+  var r = await (await fetch('/api/vigilia')).json();
+  var caja = $('[data-bloque="vigilia"]');
+  caja.dataset.salud = r.listo ? 'listo' : (r.siempreDespierta || r.arrancaSola) ? 'parcial' : 'pendiente';
+  $('.detalle', caja).textContent = r.listo ? 'siempre despierta' : 'se puede dormir';
+  $('#vigilia-estado').innerHTML = (r.dichos || [])
+    .map(function (d) { return '<div class="req-estado" style="font-size:14px">' + d + '</div>'; })
+    .join('');
+}
+
 document.addEventListener('click', async function (e) {
   var boton = e.target.closest('[data-instalar]');
   if (!boton) return;
@@ -381,7 +415,9 @@ document.addEventListener('click', async function (e) {
 
 refrescar();
 refrescarRequisitos();
+refrescarVigilia();
 setInterval(refrescar, 15000);
+setInterval(refrescarVigilia, 20000);
 // Mientras algo se instala hay que mirar más seguido, para poder contarlo.
 setInterval(function () { refrescarRequisitos(); }, 4000);
 `
@@ -425,6 +461,27 @@ máquina no debería pasar por descuido.</p>
 <p class="detalle" id="requisitos-gestor" style="margin-top:14px"></p>
 <div class="aviso ojo">Postgres <b>no</b> se instala aparte: vive dentro de Docker,
 que es lo que instalo arriba. Y Python no hace falta para nada en este proyecto.</div>`)
+
+  const vigilia = bloque('vigilia', 'Que no se duerma nunca', `
+<p class="sub">Un portátil de fábrica hace tres cosas que matan a una asistente como
+ésta, y ninguna se ve venir.</p>
+<ol class="pasos">
+  <li><b>Se suspende sola</b> a los pocos minutos. Dormida no va «más lenta»: se
+    congela entera. No lee correo, no contesta, y el resumen de las 9 de la noche
+    no sale.</li>
+  <li><b>Se suspende al cerrar la tapa</b> — que es justo lo que uno hace con un
+    portátil que va a dejar prendido en un rincón.</li>
+  <li><b>Tras un reinicio de Windows, nadie la vuelve a abrir.</b></li>
+</ol>
+<div class="aviso ojo"><b>La pantalla de bloqueo no importa.</b> Bloquear la pantalla
+no apaga nada: sigue trabajando igual. Lo que la mata es dormirse y cerrar la sesión.</div>
+<div id="vigilia-estado" style="margin:16px 0"></div>
+<button class="accion" data-ruta="/api/vigilia/despierta" data-esperando="cambiando…">No dormir nunca</button>
+<button class="accion" data-ruta="/api/vigilia/arrancar-con-windows" data-esperando="registrando…">Arrancar con Windows</button>
+<button class="accion suave" data-ruta="/api/vigilia/inicio-automatico" data-esperando="abriendo…">Entrar solo a Windows</button>
+<p class="detalle" style="margin-top:12px">Lo último abre una ventana de Windows: si
+la máquina se reinicia de madrugada y se queda pidiendo contraseña, nada arranca
+hasta que alguien vaya y la escriba.</p>`)
 
   const base = bloque('base', 'Base de datos', `
 <p class="sub">Postgres corre en Docker, en esta misma laptop. Si ya levantaste
@@ -546,30 +603,38 @@ laptop. Lo que hago aquí es decírselo. Sin este paso, la app abre pero dice
 «sin conexión» en todas las pantallas.</div>
 
 <ol class="pasos">
-  <li><b>Genera los secretos.</b> Salen cuatro: el token con el que la app le habla
-    a esta laptop, tu código para entrar, la firma de la sesión y la clave del
-    respaldo. Esa última <b>cópiala a otro sitio</b> — si se muere el disco, sin
-    ella el respaldo no se abre.</li>
+  <li><span class="donde aqui">aquí mismo</span>
+    <b>Dale al botón «Generar secretos» de aquí abajo.</b>
+    Son contraseñas que <b>me invento yo en esta laptop</b> — en Vercel no hay que
+    generar nada, ni son cuentas de ningún sitio.
+    <div class="detalle" style="margin-top:6px">De las cuatro que salen, sólo dos
+    te importan: <b>tu código para entrar a la app</b> (el que teclearás en el
+    celular) y <b>la clave del respaldo</b>, que hay que copiar a otro sitio. Las
+    otras dos son mías y no las tienes que tocar ni entender.</div></li>
 
-  <li><b>El token de Vercel.</b> Entra a
+  <li><span class="donde vercel">en vercel.com</span>
+    <b>El token.</b> Entra a
     <a class="fuera" href="https://vercel.com/account/settings/tokens" target="_blank" rel="noreferrer">vercel.com/account/settings/tokens</a>
-    → <b>Create Token</b>. Ponle cualquier nombre, ámbito tu cuenta, caducidad
-    <b>No Expiration</b> (si caduca, dejo de poder actualizarla sola). Cópialo
-    <b>ya</b>: no se vuelve a mostrar.</li>
+    → <b>Create Token</b>. Nombre cualquiera, ámbito tu cuenta, caducidad
+    <b>No Expiration</b> — si caduca, dejo de poder actualizar la app sola.
+    Cópialo <b>en ese momento</b>: no se vuelve a mostrar.</li>
 
-  <li><b>El nombre del proyecto.</b> Es el que sale en tu panel de Vercel, el mismo
-    de la URL <code class="mono">vercel.com/&lt;tu-usuario&gt;/<b>este-nombre</b></code>.
-    No es la dirección de la app, es el nombre a secas.</li>
+  <li><span class="donde vercel">en vercel.com</span>
+    <b>El nombre del proyecto.</b> El que sale en tu panel, el de la URL
+    <code class="mono">vercel.com/&lt;tu-usuario&gt;/<b>este-nombre</b></code>.
+    No es la dirección de la app: es el nombre a secas.</li>
 
-  <li><b>El gancho de despliegue.</b> En tu proyecto →
+  <li><span class="donde vercel">en vercel.com</span>
+    <b>El gancho de despliegue.</b> Tu proyecto →
     <b>Settings → Git → Deploy Hooks</b> → nombre cualquiera, rama
-    <code class="mono">main</code> → <b>Create Hook</b> → copia la URL que aparece.
-    <span class="detalle">Hace falta porque Vercel sólo aplica las variables al
-    desplegar. Sin el gancho, se guardan y la app sigue con las de ayer — es la
-    trampa clásica de esto.</span></li>
+    <code class="mono">main</code> → <b>Create Hook</b> → copia la URL.
+    <div class="detalle" style="margin-top:6px">Hace falta porque Vercel sólo
+    aplica las variables cuando despliega. Sin el gancho se guardan, pero la app
+    sigue con las de ayer — es la trampa clásica de esto.</div></li>
 
-  <li>Pon también la <b>dirección de tu app</b> (la de Vercel), y dale a
-    <b>Publicar en Vercel</b>. Escribo las cuatro variables en los tres entornos y
+  <li><span class="donde aqui">aquí mismo</span>
+    Pega esos tres, pon la <b>dirección de tu app</b> y dale a
+    <b>Publicar en Vercel</b>. Yo escribo las variables en los tres entornos y
     disparo el redespliegue.</li>
 </ol>
 ${demo([
@@ -578,14 +643,23 @@ ${demo([
   ['Aquí abajo', '→ pega los tres y dale a Publicar'],
 ])}
 <button class="accion suave" data-ruta="/api/generar" data-esperando="generando…">Generar secretos</button>
-<label for="API_TOKEN">Token de servicio (backend ↔ app)</label>
-<input type="text" id="API_TOKEN" name="API_TOKEN" class="mono" spellcheck="false">
-<label for="CODIGO_ACCESO">Tu código para entrar a la app</label>
+
+<label for="CODIGO_ACCESO">Tu código para entrar a la app — el que teclearás en el celular</label>
 <input type="text" id="CODIGO_ACCESO" name="CODIGO_ACCESO" class="mono" spellcheck="false">
-<label for="SECRETO_SESION">Firma de la sesión</label>
-<input type="text" id="SECRETO_SESION" name="SECRETO_SESION" class="mono" spellcheck="false">
-<label for="RESPALDO_CLAVE">Clave del respaldo — guárdala FUERA de esta laptop</label>
+
+<label for="RESPALDO_CLAVE">Clave del respaldo — cópiala FUERA de esta laptop</label>
 <input type="text" id="RESPALDO_CLAVE" name="RESPALDO_CLAVE" class="mono" spellcheck="false">
+<p class="detalle">Al gestor de contraseñas, o a un papel. Si el disco se muere y
+esta clave se fue con él, los respaldos cifrados no sirven de nada.</p>
+
+<details class="tecnico">
+  <summary>Las otras dos, que son mías (no hay que tocarlas)</summary>
+  <label for="API_TOKEN">Con esto la app me demuestra que es ella y no un extraño</label>
+  <input type="text" id="API_TOKEN" name="API_TOKEN" class="mono" spellcheck="false">
+  <label for="SECRETO_SESION">Con esto firmo tu sesión, para que nadie pueda falsificarla</label>
+  <input type="text" id="SECRETO_SESION" name="SECRETO_SESION" class="mono" spellcheck="false">
+</details>
+
 <label for="APP_URL">Dirección de la app en Vercel</label>
 <input type="text" id="APP_URL" name="APP_URL" class="mono" placeholder="https://algo.vercel.app" spellcheck="false">
 <label for="VERCEL_TOKEN">Token de Vercel</label>
@@ -618,6 +692,7 @@ ${demo([
   </header>
 
   ${requisitos}
+  ${vigilia}
   ${base}
   ${groq}
   ${google}
