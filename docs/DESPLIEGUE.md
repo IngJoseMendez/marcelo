@@ -169,36 +169,58 @@ justamente el UPS del que depende todo.
 
 ---
 
-## 3. Frontend en Vercel
+## 3. La app en Vercel
+
+El proyecto Next.js vive en `web/`. Antes de desplegar, el backend tiene que
+tener `API_TOKEN` en su `.env` (el mismo valor va en Vercel):
 
 ```bash
-cd app
-vercel
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+```bash
+cd web
+npm install
+npx vercel        # y luego  npx vercel --prod
 ```
 
 Variables de entorno en Vercel:
 
 | Variable | Valor |
 |---|---|
-| `API_URL` | `https://api.tudominio.com` |
-| `API_TOKEN` | el token de servicio del backend |
-| `SESSION_SECRET` | cadena aleatoria larga |
+| `API_BASE` | `https://api.tudominio.com` (el túnel) |
+| `API_TOKEN` | el mismo `API_TOKEN` del backend |
+| `CODIGO_ACCESO` | el código con el que entra Marcelo |
+| `SECRETO_SESION` | otra cadena aleatoria larga, para firmar la cookie |
 
 **El `API_TOKEN` nunca llega al navegador.** Los route handlers de Next.js
 hacen de puente: el navegador habla con Vercel, y Vercel habla con tu backend.
 Si el token estuviera en el cliente, cualquiera con la URL leería las finanzas
 de Marcelo.
 
-**Login: código de un solo uso por Telegram.** Sin contraseñas ni OAuth. Él
-abre la app, le llega el código al chat, entra. Una URL secreta **no es**
-autenticación cuando la página muestra movimientos bancarios.
+**Login por código.** Sin contraseñas ni OAuth: entra quien sabe el código, y
+la sesión queda en una cookie firmada `httpOnly` por 30 días. Cuando exista el
+bot de Telegram, el código pasa a ser de un solo uso y lo manda ella; la cookie
+no cambia. Una URL secreta **no es** autenticación cuando la página muestra
+movimientos bancarios.
+
+**Para ver la app sin levantar el backend** (útil para revisar el diseño en el
+celular antes de conectar Google):
+
+```bash
+cd web
+node scripts/api-de-prueba.mjs      # asistente de mentira en :4000
+npm run dev                          # con API_BASE=http://localhost:4000
+```
 
 ---
 
 ## 4. Verificar que quedó bien
 
-- [ ] `npm test` pasa completo (135 pruebas)
+- [ ] `npm test` pasa completo (170 pruebas)
 - [ ] `curl https://api.tudominio.com/salud` responde desde fuera de la casa
+- [ ] `curl -H "Authorization: Bearer $API_TOKEN" https://api.tudominio.com/api/jornada`
+      devuelve el día — y sin la cabecera responde 401
 - [ ] Llega un correo de prueba y aparece una fila en `acciones` con `estado='sombra'`
 - [ ] **Google Calendar NO cambió** — eso confirma que la sombra funciona
 - [ ] Apagar la laptop 30 minutos, prenderla: los correos de ese rato se procesan solos

@@ -1,6 +1,10 @@
 import type { Confianza, Origen } from './tipos.ts'
 
-export type TipoAccion = 'cancelar_instancia' | 'mover_evento' | 'borrar_serie'
+export type TipoAccion =
+  | 'cancelar_instancia'
+  | 'mover_evento'
+  | 'borrar_serie'
+  | 'crear_evento'
 
 export type Decision =
   | 'actuar_callado'
@@ -17,6 +21,8 @@ export const ES_DESTRUCTIVA: Record<TipoAccion, boolean> = {
   cancelar_instancia: false,
   mover_evento: false,
   borrar_serie: true,
+  // Meter algo en un hueco no quita nada: se borra con un toque.
+  crear_evento: false,
 }
 
 export interface EntradaPolitica {

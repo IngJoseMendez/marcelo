@@ -20,6 +20,11 @@ const Esquema = z.object({
   MS_TENANT_ID: z.string().default('common'),
   MS_REFRESH_TOKEN: z.string().default(''),
 
+  // Lo que consume la app. Sin token, la API no abre.
+  API_TOKEN: z.string().default(''),
+  JORNADA_DESDE: z.string().regex(/^\d{2}:\d{2}$/).default('07:00'),
+  JORNADA_HASTA: z.string().regex(/^\d{2}:\d{2}$/).default('22:00'),
+
   MODO_SOMBRA: z.string().default('true'),
   PUERTO: z.coerce.number().int().positive().default(3000),
   NIVEL_LOG: z.string().default('info'),
@@ -58,6 +63,12 @@ export function cargarConfig(env: Record<string, string | undefined>) {
       tenantId: v.MS_TENANT_ID,
       refreshToken: v.MS_REFRESH_TOKEN,
     },
+
+    api: { token: v.API_TOKEN },
+
+    // Ventana de trabajo: fuera de ella el tiempo libre no cuenta como hueco.
+    // Sin esto, «tienes 9 horas libres» incluiría la madrugada.
+    jornada: { desde: v.JORNADA_DESDE, hasta: v.JORNADA_HASTA },
 
     // Sólo un "false" explícito apaga la sombra. Cualquier otra cosa
     // —vacío, error de tipeo, variable ausente— la deja encendida.

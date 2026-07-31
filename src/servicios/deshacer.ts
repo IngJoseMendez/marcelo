@@ -1,14 +1,17 @@
 import type { RepoAcciones } from '../repos/acciones.ts'
+import type { RepoIntenciones } from '../repos/intenciones.ts'
 import type { SumideroCalendario } from '../puertos/sumidero-calendario.ts'
 
 export interface ResultadoDeshacer {
   ok: boolean
   motivo?: string
+  accionId?: number
 }
 
 export function crearServicioDeshacer(
   repo: RepoAcciones,
-  calendario: SumideroCalendario
+  calendario: SumideroCalendario,
+  intenciones?: RepoIntenciones
 ) {
   async function deshacer(id: number): Promise<ResultadoDeshacer> {
     const accion = await repo.porId(id)
@@ -22,7 +25,12 @@ export function crearServicioDeshacer(
     // La auditoría es append-only: se marca el estado, nunca se borra la
     // fila. Si algo salió mal siempre queda el rastro de qué pasó y por qué.
     await repo.marcarDeshecha(id)
-    return { ok: true }
+
+    // Si lo que se deshizo fue agendar algo, la tarea no desaparece: vuelve
+    // a la bandeja. Perderla sería peor que no haberla agendado nunca.
+    if (accion.tipo === 'crear_evento') await intenciones?.devolverPorAccion(id)
+
+    return { ok: true, accionId: id }
   }
 
   return {

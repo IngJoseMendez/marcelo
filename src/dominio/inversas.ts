@@ -1,5 +1,6 @@
 import type {
-  AccionCalendario,
+  AccionCrearEvento,
+  AccionDestructiva,
   EventoInstancia,
   Inversa,
 } from '../puertos/sumidero-calendario.ts'
@@ -17,7 +18,7 @@ export interface EstadoPrevio {
  * —o ninguna, si el evento ya desapareció.
  */
 export function calcularInversa(
-  accion: AccionCalendario,
+  accion: AccionDestructiva,
   previo: EstadoPrevio
 ): Inversa {
   switch (accion.tipo) {
@@ -45,5 +46,18 @@ export function calcularInversa(
         rrule: previo.rrule,
         titulo: previo.instancia.titulo,
       }
+  }
+}
+
+/**
+ * Crear no destruye nada, así que no necesita estado previo: su inversa se
+ * conoce entera de antemano. Va aparte para que la firma de `calcularInversa`
+ * siga exigiendo el estado previo donde de verdad hace falta.
+ */
+export function inversaDeCreacion(accion: AccionCrearEvento): Inversa {
+  return {
+    tipo: 'borrar_evento',
+    calendarId: accion.calendarId,
+    eventoId: accion.eventoId,
   }
 }

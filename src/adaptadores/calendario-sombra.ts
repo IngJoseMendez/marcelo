@@ -29,6 +29,14 @@ export class CalendarioSombra implements SumideroCalendario {
     return this.lector.instanciasEnRango(calendarId, eventoId, desdeIso, hastaIso)
   }
 
+  eventosEnRango(
+    calendarId: string,
+    desdeIso: string,
+    hastaIso: string
+  ): Promise<EventoInstancia[]> {
+    return this.lector.eventosEnRango(calendarId, desdeIso, hastaIso)
+  }
+
   async aplicar(accion: AccionCalendario): Promise<void> {
     this.aplicadas.push(accion)
   }

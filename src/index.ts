@@ -15,6 +15,11 @@ import { crearRepoCompromisos } from './repos/compromisos.ts'
 import { crearRepoCorreos, crearRepoCuentas } from './repos/correos.ts'
 import { crearRepoAcciones } from './repos/acciones.ts'
 import { crearRepoCola } from './repos/cola.ts'
+import { crearRepoIntenciones } from './repos/intenciones.ts'
+import { crearServicioJornada } from './servicios/jornada.ts'
+import { crearServicioCronica } from './servicios/cronica.ts'
+import { crearServicioAgenda } from './servicios/agendar.ts'
+import { crearServicioDeshacer } from './servicios/deshacer.ts'
 import { crearClasificador } from './pipeline/clasificador.ts'
 import { crearExtractor } from './pipeline/extractor.ts'
 import { crearDesempate } from './pipeline/desempate.ts'
@@ -80,12 +85,17 @@ if (fuentes.includes('outlook')) {
 // ── Pipeline ──────────────────────────────────────────────────
 const llm = new ProveedorGroq(config.groq.apiKey, config.groq.baseUrl)
 const cola = crearRepoCola(db)
+const reloj = new RelojReal(config.zonaHoraria)
+
+const repoCompromisos = crearRepoCompromisos(db)
+const repoAcciones = crearRepoAcciones(db)
+const repoIntenciones = crearRepoIntenciones(db)
 
 const procesador = crearProcesador({
-  reloj: new RelojReal(config.zonaHoraria),
-  repoCompromisos: crearRepoCompromisos(db),
+  reloj,
+  repoCompromisos,
   repoCorreos: crearRepoCorreos(db),
-  repoAcciones: crearRepoAcciones(db),
+  repoAcciones,
   clasificador: crearClasificador(llm, config.groq.modeloClasificador),
   extractor: crearExtractor(llm, config.groq.modeloExtractor),
   desempate: crearDesempate(llm, config.groq.modeloExtractor),
@@ -133,11 +143,40 @@ async function ponerseAlDiaTodas(): Promise<void> {
 await ponerseAlDiaTodas()
 await drenarCola()
 
+// ── Lo que consume la app ─────────────────────────────────────
+const jornada = crearServicioJornada({
+  reloj,
+  calendario,
+  repoAcciones,
+  calendarId: config.google.calendarId,
+  desde: config.jornada.desde,
+  hasta: config.jornada.hasta,
+})
+
 const app = crearServidor({
   db,
   modoSombra: config.modoSombra,
   alRecibirAviso: async () => { await ponerseAlDiaTodas(); await drenarCola() },
+  api: {
+    token: config.api.token,
+    db,
+    reloj,
+    modoSombra: config.modoSombra,
+    jornada,
+    cronica: crearServicioCronica(db, config.zonaHoraria),
+    agenda: crearServicioAgenda({
+      reloj, calendario, repoAcciones, repoIntenciones,
+      calendarId: config.google.calendarId,
+    }),
+    deshacer: crearServicioDeshacer(repoAcciones, calendario, repoIntenciones),
+    repoIntenciones,
+    repoCompromisos,
+  },
 })
+
+if (!config.api.token) {
+  log.warn('API_TOKEN vacío: la app no podrá conectarse hasta que lo configures')
+}
 
 cron.schedule('* * * * *', () => { void drenarCola() })
 // Red de seguridad: si el push falla en silencio, esto lo recoge igual.

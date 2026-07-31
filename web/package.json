@@ -1,0 +1,24 @@
+{
+  "name": "app-segundo-cerebro",
+  "version": "0.1.0",
+  "private": true,
+  "description": "«Mi Segundo Cerebro» — la app: Jornada, Bandeja, Crónica, Tesoro y Pactos",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "16.2.12",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.7.2"
+  }
+}

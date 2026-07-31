@@ -1,5 +1,5 @@
 import type { Reloj } from '../puertos/reloj.ts'
-import type { AccionCalendario, SumideroCalendario } from '../puertos/sumidero-calendario.ts'
+import type { AccionDestructiva, SumideroCalendario } from '../puertos/sumidero-calendario.ts'
 import type { RepoCompromisos } from '../repos/compromisos.ts'
 import type { RepoCorreos } from '../repos/correos.ts'
 import type { RepoAcciones } from '../repos/acciones.ts'
@@ -126,7 +126,7 @@ export function crearProcesador(d: DepsProcesador) {
 
       // 7. Actuar, guardando primero cómo deshacerlo.
       const fecha = intervalo.inicio.toISODate()!
-      const accion: AccionCalendario = tipo === 'cancelar_instancia'
+      const accion: AccionDestructiva = tipo === 'cancelar_instancia'
         ? {
             tipo: 'cancelar_instancia',
             calendarId: compromiso.googleCalendarId,

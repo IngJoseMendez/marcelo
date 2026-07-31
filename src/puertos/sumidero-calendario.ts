@@ -7,6 +7,23 @@ export interface EventoInstancia {
   estado: 'confirmado' | 'cancelado'
 }
 
+/**
+ * Crear un evento trae su propio identificador ya decidido.
+ *
+ * No es un capricho: la inversa se guarda ANTES de aplicar la acción, y la
+ * inversa de crear es borrar *ese* evento. Si el identificador lo pusiera
+ * el servidor, entre la escritura y el registro habría una ventana en la
+ * que existe un evento que nadie sabe deshacer.
+ */
+export interface AccionCrearEvento {
+  tipo: 'crear_evento'
+  calendarId: string
+  eventoId: string
+  titulo: string
+  inicio: string
+  fin: string
+}
+
 export type AccionCalendario =
   | { tipo: 'cancelar_instancia'; calendarId: string; instanciaId: string }
   | {
@@ -17,6 +34,10 @@ export type AccionCalendario =
       nuevoFin: string
     }
   | { tipo: 'borrar_serie'; calendarId: string; eventoId: string }
+  | AccionCrearEvento
+
+/** Las que destruyen algo que ya existía: su inversa necesita el estado previo. */
+export type AccionDestructiva = Exclude<AccionCalendario, AccionCrearEvento>
 
 /** Lo que hay que aplicar para devolver el calendario a como estaba. */
 export type Inversa =
@@ -35,6 +56,7 @@ export type Inversa =
       rrule: string | null
       titulo: string
     }
+  | { tipo: 'borrar_evento'; calendarId: string; eventoId: string }
 
 export interface SumideroCalendario {
   /**
@@ -47,6 +69,18 @@ export interface SumideroCalendario {
   instanciasEnRango(
     calendarId: string,
     eventoId: string,
+    desdeIso: string,
+    hastaIso: string
+  ): Promise<EventoInstancia[]>
+
+  /**
+   * Todo lo que hay en el calendario dentro de una ventana, sin saber de
+   * antemano a qué serie pertenece. Es lo que hace posible dibujar el día
+   * entero —y por tanto ver dónde NO hay nada, que es el punto de la
+   * vista de agenda.
+   */
+  eventosEnRango(
+    calendarId: string,
     desdeIso: string,
     hastaIso: string
   ): Promise<EventoInstancia[]>

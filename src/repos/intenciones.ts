@@ -88,6 +88,19 @@ export function crearRepoIntenciones(db: BaseDatos) {
         [id, accionId, googleEventId])
     },
 
+    /**
+     * Al deshacer la acción que la agendó, la intención vuelve a la bandeja.
+     * Se busca por la acción y no por el id de la intención porque quien
+     * deshace sólo conoce la acción: la auditoría es el hilo del que se tira.
+     */
+    async devolverPorAccion(accionId: number): Promise<void> {
+      await db.query(
+        `UPDATE intenciones
+            SET estado = 'pendiente', accion_id = NULL, google_event_id = NULL,
+                agendada_en = NULL
+          WHERE accion_id = $1 AND estado = 'agendada'`, [accionId])
+    },
+
     /** Al deshacer el agendamiento, la intención vuelve a la bandeja. */
     async devolverABandeja(id: number): Promise<void> {
       await db.query(
