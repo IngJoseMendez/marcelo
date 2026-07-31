@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "configurar": "tsx src/configuracion/abrir.ts",
     "db:migrate": "tsx src/db/migrar-cli.ts",
     "test": "node --import tsx --test \"tests/**/*.test.ts\""
   },

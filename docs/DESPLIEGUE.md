@@ -1,5 +1,29 @@
 # Despliegue paso a paso
 
+> **Atajo: no hagas esto a mano.**
+>
+> ```bash
+> npm install
+> npm start
+> ```
+>
+> Si falta configuración, en vez de caerse abre un **asistente** y te dice a
+> qué dirección ir (`http://localhost:3210`). Ahí está todo lo de abajo en
+> forma de guía con enlaces y formularios: pega cada dato, él lo **prueba
+> contra el servicio de verdad** y se guarda lo que salga bien. Los modelos
+> de Groq, el número de chat de Telegram y los `refresh_token` de Google y
+> Outlook **no se escriben a mano** — salen de la propia prueba.
+>
+> Para volver a abrirlo después: `npm run configurar`.
+>
+> El asistente **sólo escucha en `127.0.0.1`**. Eso es toda su autenticación,
+> y por eso no puede vivir en Vercel ni colgar del túnel: recoge el secreto
+> de cliente de Google y el token del bot. Quien lo abre ya está sentado
+> frente a la laptop.
+>
+> Lo que sigue es la misma puesta en marcha explicada a mano, por si algo
+> falla o prefieres entender qué está pasando por debajo.
+
 ## 0. Dónde va cada cosa (y por qué)
 
 ```
@@ -228,7 +252,7 @@ npm run dev                          # con API_BASE=http://localhost:4000
 
 ## 4. Verificar que quedó bien
 
-- [ ] `npm test` pasa completo (242 pruebas)
+- [ ] `npm test` pasa completo (276 pruebas)
 - [ ] `GROQ_MODELO_TRANSCRIPTOR` puesto (si no, el micrófono de la app responde
       503 y lo dice, y el bot contesta que todavía no sabe oír); y `FFMPEG_RUTA`
       si quieres que normalice el volumen

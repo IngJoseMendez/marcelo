@@ -1,328 +1,37 @@
 import 'dotenv/config'
-import { createHmac } from 'node:crypto'
-import cron from 'node-cron'
 import pino from 'pino'
-import { cargarConfig, fuentesConfiguradas } from './config.ts'
-import { crearPoolPostgres, desdePostgres } from './db/base-datos.ts'
-import { migrar } from './db/migrar.ts'
-import { RelojReal } from './puertos/reloj.ts'
-import { crearClienteGoogle } from './adaptadores/google-auth.ts'
-import { FuenteGmail } from './adaptadores/gmail.ts'
-import { FuenteOutlook } from './adaptadores/outlook.ts'
-import { CalendarioGoogle } from './adaptadores/google-calendar.ts'
-import { CalendarioSombra } from './adaptadores/calendario-sombra.ts'
-import { ProveedorGroq } from './adaptadores/groq.ts'
-import { TranscriptorGroq } from './adaptadores/groq-whisper.ts'
-import { crearRepoCompromisos } from './repos/compromisos.ts'
-import { crearRepoCorreos, crearRepoCuentas } from './repos/correos.ts'
-import { crearRepoAcciones } from './repos/acciones.ts'
-import { crearRepoCola } from './repos/cola.ts'
-import { crearRepoIntenciones } from './repos/intenciones.ts'
-import { crearRepoReglas } from './repos/reglas.ts'
-import { crearInterprete } from './pipeline/interprete.ts'
-import { crearServicioJornada } from './servicios/jornada.ts'
-import { crearServicioCronica } from './servicios/cronica.ts'
-import { crearServicioAgenda } from './servicios/agendar.ts'
-import { crearServicioDeshacer } from './servicios/deshacer.ts'
-import { crearServicioInstruccion } from './servicios/instruccion.ts'
-import { crearServicioResumen } from './servicios/resumen.ts'
-import { crearServicioConversacion } from './servicios/conversacion.ts'
-import { crearCanalTelegram } from './adaptadores/telegram.ts'
-import { crearClasificador } from './pipeline/clasificador.ts'
-import { crearExtractor } from './pipeline/extractor.ts'
-import { crearDesempate } from './pipeline/desempate.ts'
-import { crearProcesador } from './pipeline/procesar-correo.ts'
-import { crearSincronizacion, type CuentaConectada } from './servicios/sincronizacion.ts'
-import { crearServidor } from './http/servidor.ts'
-import type { SumideroCalendario } from './puertos/sumidero-calendario.ts'
+import { cargarConfig } from './config.ts'
+import { resumirFaltantes, revisar } from './configuracion/estado.ts'
+import { arrancarConfigurador } from './configuracion/servidor.ts'
+import { arrancarAsistente } from './arrancar-asistente.ts'
 
-const config = cargarConfig(process.env)
-const log = pino({ level: config.nivelLog })
+/**
+ * El arranque tiene dos caminos.
+ *
+ * Si falta configuración no se cae con un error en el log —donde no lo ve
+ * nadie que no sea programador— sino que abre el asistente y dice a qué
+ * dirección ir. La misma función decide las dos cosas, así que es
+ * imposible que la pantalla diga «todo listo» y el servicio no arranque.
+ */
 
-const db = desdePostgres(crearPoolPostgres(config.urlBaseDatos))
-await migrar(db)
+const log = pino({ level: process.env.NIVEL_LOG || 'info' })
+const revision = revisar(process.env)
 
-const fuentes = fuentesConfiguradas(config)
-if (fuentes.length === 0) {
-  log.error('No hay ninguna fuente de correo configurada. Revisa el .env.')
-  process.exit(1)
+if (revision.listo) {
+  await arrancarAsistente(cargarConfig(process.env))
+} else {
+  const asistente = await arrancarConfigurador({ registro: log })
+
+  // A pantalla completa y sin formato de log: esto lo lee alguien que
+  // acaba de clonar el proyecto, no alguien que está depurando.
+  const linea = '─'.repeat(58)
+  process.stdout.write(
+    `\n┌${linea}┐\n`
+    + `  Todavía no estoy configurada.\n\n`
+    + `  Falta:  ${resumirFaltantes(revision) || 'poca cosa'}\n\n`
+    + `  Abre esta dirección y te guío paso a paso:\n\n`
+    + `      ${asistente.url}\n\n`
+    + `  No hace falta que sepas de esto. Yo pruebo cada cosa\n`
+    + `  contra su servicio y me guardo lo que salga bien.\n`
+    + `└${linea}┘\n\n`)
 }
-
-// ── Calendario ────────────────────────────────────────────────
-// El modo sombra se activa envolviendo el sumidero, no con una bandera
-// aparte: así es imposible que el pipeline crea que ensaya mientras
-// escribe de verdad.
-const auth = crearClienteGoogle(
-  config.google.clientId, config.google.clientSecret, config.google.refreshToken)
-
-const calendarioReal = new CalendarioGoogle(auth, config.zonaHoraria)
-const calendario: SumideroCalendario = config.modoSombra
-  ? new CalendarioSombra(calendarioReal)
-  : calendarioReal
-
-// ── Cuentas de correo ─────────────────────────────────────────
-const repoCuentas = crearRepoCuentas(db)
-const conectadas: CuentaConectada[] = []
-
-if (fuentes.includes('gmail')) {
-  const cuenta = await repoCuentas.registrar('gmail', 'gmail')
-  const gmail = new FuenteGmail(auth, cuenta.id)
-  conectadas.push({
-    cuentaId: cuenta.id, proveedor: 'gmail',
-    fuente: {
-      idsDesde: (c) => gmail.idsDesde(c),
-      mensajeCompleto: (id) => gmail.mensajeCompleto(id),
-      arrancarDesdeCero: () => gmail.idsRecientes(),
-    },
-  })
-}
-
-if (fuentes.includes('outlook')) {
-  const cuenta = await repoCuentas.registrar('outlook', 'outlook')
-  const outlook = new FuenteOutlook(config.microsoft, cuenta.id)
-  conectadas.push({
-    cuentaId: cuenta.id, proveedor: 'outlook',
-    fuente: {
-      idsDesde: (c) => outlook.idsDesde(c),
-      mensajeCompleto: (id) => outlook.mensajeCompleto(id),
-      arrancarDesdeCero: () => outlook.iniciarDelta(),
-    },
-  })
-}
-
-// ── Pipeline ──────────────────────────────────────────────────
-const llm = new ProveedorGroq(config.groq.apiKey, config.groq.baseUrl)
-const cola = crearRepoCola(db)
-const reloj = new RelojReal(config.zonaHoraria)
-
-// Uno solo para los dos canales: la app y Telegram oyen con el mismo oído.
-const transcriptor = config.groq.modeloTranscriptor
-  ? new TranscriptorGroq(
-      config.groq.apiKey, config.groq.baseUrl,
-      config.groq.modeloTranscriptor, config.ffmpeg)
-  : undefined
-
-const repoCompromisos = crearRepoCompromisos(db)
-const repoAcciones = crearRepoAcciones(db)
-const repoIntenciones = crearRepoIntenciones(db)
-const repoReglas = crearRepoReglas(db)
-
-// Las reglas que él dicta ("de Bancolombia no me avises") viven en la base y
-// se releen en cada tanda: el procesador lee estos arreglos en cada correo,
-// así que actualizarlos en sitio hace que una regla nueva valga sin
-// reiniciar el servicio.
-const remitentesIgnorados: string[] = []
-const remitentesSilenciados: string[] = []
-
-async function recargarReglas(): Promise<void> {
-  const [ignorar, silenciar] = await Promise.all([
-    repoReglas.porTipo('ignorar_remitente'),
-    repoReglas.porTipo('silenciar_remitente'),
-  ])
-  remitentesIgnorados.splice(0, remitentesIgnorados.length, ...ignorar)
-  remitentesSilenciados.splice(0, remitentesSilenciados.length, ...silenciar)
-}
-
-const procesador = crearProcesador({
-  reloj,
-  repoCompromisos,
-  repoCorreos: crearRepoCorreos(db),
-  repoAcciones,
-  clasificador: crearClasificador(llm, config.groq.modeloClasificador),
-  extractor: crearExtractor(llm, config.groq.modeloExtractor),
-  desempate: crearDesempate(llm, config.groq.modeloExtractor),
-  calendario,
-  remitentesIgnorados,
-  remitentesSilenciados,
-})
-
-const sync = crearSincronizacion(db, cola)
-const porCuenta = new Map(conectadas.map((c) => [c.cuentaId, c]))
-
-// ── El canal de control ───────────────────────────────────────
-// Se arma antes de drenar la cola porque el pipeline ya puede tener algo
-// que avisar en la primera tanda, y porque el bot se construye en dos
-// tiempos: primero por dónde hablar, y al final con qué contestar.
-const cronica = crearServicioCronica(db, config.zonaHoraria)
-
-const canal = config.telegram.token
-  ? crearCanalTelegram({
-      token: config.telegram.token,
-      chatId: config.telegram.chatId,
-      registro: log,
-    })
-  : null
-
-const resumen = canal
-  ? crearServicioResumen({
-      reloj, cronica, notificador: canal.notificador, urlApp: config.urlApp,
-    })
-  : null
-
-async function drenarCola(): Promise<void> {
-  await recargarReglas()
-  for (const item of await cola.tomarPendientes(10)) {
-    const cuenta = porCuenta.get(item.cuentaId)
-    if (!cuenta) {
-      await cola.marcarError(item.id, 'La cuenta ya no está conectada')
-      continue
-    }
-    try {
-      const correo = await cuenta.fuente.mensajeCompleto(item.messageId)
-      const r = await procesador.procesar(correo, cuenta.proveedor)
-      log.info({ messageId: item.messageId, proveedor: cuenta.proveedor, ...r },
-        'correo procesado')
-
-      // La otra mitad de la política: lo que decidió «actuar y avisar»
-      // sale ahora mismo, y lo que decidió «actuar callada» espera al
-      // resumen de las 21:00. Que el aviso falle no puede desandar lo
-      // que ya se hizo ni dejar el correo sin marcar.
-      if (resumen && r.decision === 'actuar_y_avisar' && r.accionId !== null) {
-        await resumen.avisar(r.accionId)
-          .catch((e) => log.error({ err: e, accionId: r.accionId }, 'no se pudo avisar'))
-      }
-
-      await cola.marcarListo(item.id)
-    } catch (e) {
-      log.error({ err: e, messageId: item.messageId }, 'fallo procesando')
-      await cola.marcarError(item.id, String(e))
-    }
-  }
-}
-
-async function ponerseAlDiaTodas(): Promise<void> {
-  for (const cuenta of conectadas) {
-    try {
-      const n = await sync.ponerseAlDia(cuenta)
-      if (n > 0) log.info({ proveedor: cuenta.proveedor, encolados: n }, 'puesta al día')
-      await sync.latido(cuenta.cuentaId)
-    } catch (e) {
-      log.error({ err: e, proveedor: cuenta.proveedor }, 'fallo sincronizando')
-    }
-  }
-}
-
-// Recuperación al arrancar: la laptop pudo estar apagada.
-await ponerseAlDiaTodas()
-await drenarCola()
-
-// ── Lo que consume la app ─────────────────────────────────────
-const jornada = crearServicioJornada({
-  reloj,
-  calendario,
-  repoAcciones,
-  calendarId: config.google.calendarId,
-  desde: config.jornada.desde,
-  hasta: config.jornada.hasta,
-})
-
-const deshacer = crearServicioDeshacer(repoAcciones, calendario, repoIntenciones)
-
-// El canal de instrucciones: el LLM entiende, y de ahí en adelante decide y
-// actúa el mismo código que atiende los correos.
-const instruccion = crearServicioInstruccion({
-  reloj,
-  interprete: crearInterprete(llm, config.groq.modeloExtractor),
-  desempate: crearDesempate(llm, config.groq.modeloExtractor),
-  calendario,
-  repoCompromisos,
-  repoAcciones,
-  repoIntenciones,
-  repoReglas,
-  jornada,
-  deshacer,
-  calendarId: config.google.calendarId,
-})
-
-// Telegram y la app son dos entradas del mismo intérprete: lo único que
-// cambia es por dónde vuelve la respuesta.
-canal?.conectar(crearServicioConversacion({
-  instruccion, deshacer, transcriptor, resumen: resumen ?? undefined,
-  canal: 'telegram',
-}))
-
-const app = crearServidor({
-  db,
-  modoSombra: config.modoSombra,
-  alRecibirAviso: async () => { await ponerseAlDiaTodas(); await drenarCola() },
-  api: {
-    token: config.api.token,
-    db,
-    reloj,
-    modoSombra: config.modoSombra,
-    jornada,
-    cronica,
-    agenda: crearServicioAgenda({
-      reloj, calendario, repoAcciones, repoIntenciones,
-      calendarId: config.google.calendarId,
-    }),
-    deshacer,
-    instruccion,
-    transcriptor,
-    // Derivado del token de servicio: no hace falta otro secreto que
-    // alguien tenga que acordarse de poner.
-    secretoVoz: createHmac('sha256', config.api.token || 'sin-token')
-      .update('firma-de-voz').digest('hex'),
-    repoIntenciones,
-    repoCompromisos,
-  },
-})
-
-if (!config.api.token) {
-  log.warn('API_TOKEN vacío: la app no podrá conectarse hasta que lo configures')
-}
-if (!canal) {
-  log.warn('TELEGRAM_BOT_TOKEN vacío: sin canal de Telegram y sin resumen diario')
-} else if (!config.telegram.chatId) {
-  log.warn('TELEGRAM_CHAT_ID vacío: escríbele al bot y te dirá qué número poner')
-}
-
-cron.schedule('* * * * *', () => { void drenarCola() })
-// Red de seguridad: si el push falla en silencio, esto lo recoge igual.
-cron.schedule('*/5 * * * *', () => { void ponerseAlDiaTodas() })
-
-// El resumen de las 21:00, en hora de Bogotá. Si no hizo nada, no manda
-// nada: una asistente que escribe a diario «hoy no pasó nada» se vuelve
-// ruido en una semana.
-if (resumen) {
-  cron.schedule('0 21 * * *', () => {
-    void resumen.enviar()
-      .then((r) => log.info({ enviado: r.enviado }, 'resumen diario'))
-      .catch((e) => log.error({ err: e }, 'no se pudo mandar el resumen'))
-  }, { timezone: config.zonaHoraria })
-}
-
-// El watch de Gmail caduca a los 7 días y la suscripción de Graph a los 3.
-// Si esto falla, el sistema deja de recibir avisos SIN dar ningún error.
-cron.schedule('0 3 * * *', () => {
-  if (!config.google.topicoPubsub) return
-  const gmail = conectadas.find((c) => c.proveedor === 'gmail')
-  if (!gmail) return
-  void new FuenteGmail(auth, gmail.cuentaId)
-    .renovarWatch(config.google.topicoPubsub)
-    .then((r) => sync.guardarCursor(gmail.cuentaId, r.cursor))
-    .then(() => log.info('watch de Gmail renovado'))
-    .catch((e) => log.error({ err: e }, 'NO SE PUDO RENOVAR EL WATCH DE GMAIL'))
-}, { timezone: config.zonaHoraria })
-
-await app.listen({ port: config.puerto, host: '0.0.0.0' })
-
-// Long polling: sale a preguntar en vez de esperar a que le toquen, que es
-// lo único que funciona sin IP pública.
-canal?.arrancar()
-
-// Sin `allSettled` esto se cuelga: con `canal` en null, el encadenamiento
-// opcional se lleva por delante también el `.finally`, y nadie sale nunca.
-for (const señal of ['SIGINT', 'SIGTERM'] as const) {
-  process.once(señal, () => {
-    log.info({ señal }, 'cerrando')
-    void Promise.allSettled([canal?.detener(), app.close()])
-      .finally(() => process.exit(0))
-  })
-}
-
-log.info(
-  { puerto: config.puerto, modoSombra: config.modoSombra, fuentes },
-  config.modoSombra
-    ? 'Asistente arriba EN MODO SOMBRA: observa y registra, no toca el calendario'
-    : 'Asistente arriba EN MODO REAL: va a modificar el calendario')
