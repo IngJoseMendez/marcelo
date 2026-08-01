@@ -1,4 +1,5 @@
 import { SinConexion } from '@/componentes/SinConexion'
+import { FormaPacto } from '@/componentes/FormaAMano'
 import { pedir } from '@/lib/api'
 import { exigirSesion } from '@/lib/sesion'
 import { horarioLegible } from '@/lib/pactos'
@@ -23,6 +24,8 @@ export default async function Pagina() {
       </div>
 
       <div className="bloque">
+        <FormaPacto />
+
         {compromisos.length === 0 ? (
           <div className="tarjeta vacio" data-anim>
             <strong>Todavía no conoce ningún compromiso</strong>
@@ -62,9 +65,9 @@ export default async function Pagina() {
 
         <p className="pie" data-anim>
           Un pacto es lo que le da permiso: sin el remitente vinculado, un correo
-          que cancela una clase no le dice nada. Enseñarle uno nuevo hablando
-          —«los martes tengo laboratorio de 10 a 12 con la profe Cardona»— llega
-          con el canal de voz.
+          que cancela una clase no le dice nada. Puedes enseñarle uno hablando
+          —«los martes tengo laboratorio de 10 a 12 con la profe Cardona»— o
+          escribirlo arriba, que funciona igual aunque la IA esté caída.
         </p>
       </div>
     </section>

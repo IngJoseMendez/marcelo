@@ -1142,3 +1142,78 @@ button.rejilla__hueco:active { box-shadow: inset 0 0 0 1.5px var(--linea-2); col
 .racha__dia[data-estado='mal']  { background: var(--rojo); }
 .sombra-panel__dictamen { font-size: 13.5px; color: var(--tinta-2); letter-spacing: -.008em; }
 .sombra-panel__pista { font-size: 12px; color: var(--tinta-3); margin-top: 8px; line-height: 1.45; }
+
+/* ── hacer las cosas a mano ─────────────────────────────────────
+   La IA es un añadido; esto es el camino que sigue existiendo el día que
+   no hay cuota, no hay proveedor o no hay señal para dictar. Va plegado
+   porque hablar sigue siendo lo normal — pero está siempre a un toque, no
+   escondido en un menú al que se llega cuando ya te rendiste. */
+.a-mano { padding: 0; overflow: hidden; }
+.a-mano__cabeza {
+  display: flex; align-items: center; gap: 13px; width: 100%;
+  padding: 17px 18px; text-align: left; background: none; border: 0;
+  color: var(--tinta); cursor: pointer;
+}
+.a-mano__cabeza strong {
+  display: block; font-size: 15px; font-weight: 640; letter-spacing: -.02em;
+}
+.a-mano__pista {
+  display: block; margin-top: 2px;
+  font-size: 12.5px; color: var(--tinta-3); letter-spacing: -.006em;
+}
+.a-mano__mas {
+  display: grid; place-items: center; flex: none;
+  width: 28px; height: 28px; border-radius: 999px;
+  background: var(--lumen-sv); color: var(--lumen-tx);
+  font-size: 17px; font-weight: 500; line-height: 1;
+  transition: transform 240ms var(--sal);
+}
+.a-mano[data-abierto="true"] .a-mano__mas { transform: rotate(180deg); }
+
+.a-mano__cuerpo {
+  padding: 2px 18px 18px;
+  animation: aMano-abre 260ms var(--sal) both;
+}
+@keyframes aMano-abre {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.a-mano__etiqueta {
+  display: block; margin: 15px 0 7px;
+  font-size: 12.5px; font-weight: 600; color: var(--tinta-2);
+  letter-spacing: -.008em;
+}
+.a-mano__cuerpo .campo { height: 44px; }
+.campo--ancho { display: block; width: 100%; }
+.a-mano__par { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.a-mano__par .campo { width: 100%; }
+.a-mano__fila { display: flex; flex-wrap: wrap; gap: 7px; }
+.a-mano__enviar { height: 44px; width: 100%; margin-top: 18px; justify-content: center; }
+.a-mano__nota {
+  margin-top: 11px; font-size: 12.5px; line-height: 1.45;
+  color: var(--tinta-3); letter-spacing: -.004em;
+}
+.a-mano__nota[data-mal="true"] { color: var(--rojo); }
+
+/* Las fichas: elegir tocando en vez de escribir. En un teléfono, un
+   desplegable de siete días es peor que siete botones. */
+.ficha {
+  height: 36px; padding: 0 14px; border-radius: 999px;
+  font-size: 13px; font-weight: 600; letter-spacing: -.008em;
+  background: var(--papel-2); color: var(--tinta-2); border: 0; cursor: pointer;
+  transition: transform 130ms var(--entra), background-color 160ms var(--entra), color 160ms var(--entra);
+}
+.ficha:active { transform: scale(.94); }
+.ficha[data-viva="true"] { background: var(--lumen); color: #fff; }
+.ficha--dia { width: 38px; padding: 0; text-align: center; }
+
+@media (max-width: 380px) {
+  .a-mano__par { grid-template-columns: 1fr; }
+}
+
+/* En pantalla grande el formulario no tiene por qué ocupar todo el ancho:
+   una línea de 900px de campos es incómoda de leer y de rellenar. */
+@media (min-width: 900px) {
+  .a-mano__cuerpo form { max-width: 34rem; }
+}

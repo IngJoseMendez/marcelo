@@ -15,6 +15,7 @@ import type { ServicioInstruccion } from '../servicios/instruccion.ts'
 import type { ServicioTesoro } from '../servicios/tesoro.ts'
 import type { ServicioPropuestas } from '../servicios/propuestas.ts'
 import type { ServicioAcceso } from '../servicios/acceso.ts'
+import type { ServicioAMano } from '../servicios/a-mano.ts'
 import { medirGraduacion } from '../dominio/graduacion.ts'
 import type { Transcriptor } from '../puertos/transcriptor.ts'
 import { esDeVoz, firmarVoz } from '../dominio/firma-voz.ts'
@@ -44,6 +45,14 @@ export interface DepsApi {
   repoAcciones: RepoAcciones
   /** El código de un solo uso. Sin Telegram, la app cae al código fijo. */
   acceso?: ServicioAcceso
+  /**
+   * Hacer las cosas a mano, sin modelo de por medio.
+   *
+   * Es lo que mantiene la app usable el día que la IA no está: se puede
+   * enseñar un compromiso y cancelar un bloque con un formulario. Mismo
+   * actuador, misma inversa antes de aplicar, misma auditoría.
+   */
+  aMano?: ServicioAMano
 }
 
 const Mes = z.object({ mes: z.string().regex(/^\d{4}-\d{2}/).optional() })
@@ -66,6 +75,16 @@ const Agendar = z.object({
 })
 
 const Cerrar = z.object({ estado: z.enum(['hecha', 'descartada']) })
+
+const NuevoPacto = z.object({
+  titulo: z.string().min(1).max(200),
+  // Lunes es 1, como en Luxon y como en la RRULE.
+  dias: z.array(z.coerce.number().int().min(1).max(7)).min(1),
+  horaInicio: z.string().regex(/^\d{2}:\d{2}$/),
+  horaFin: z.string().regex(/^\d{2}:\d{2}$/),
+  alias: z.array(z.string().max(80)).max(10).optional(),
+  remitentes: z.array(z.string().max(160)).max(10).optional(),
+})
 const Veredicto = z.object({ veredicto: z.enum(['acierto', 'error']) })
 
 const Instruccion = z.object({
@@ -183,6 +202,35 @@ export function registrarApi(app: FastifyInstance, d: DepsApi): void {
     api.get('/pactos', async () => ({
       compromisos: await d.repoCompromisos.listarActivos(),
     }))
+
+    /**
+     * Enseñarle un compromiso escribiéndolo, sin pasar por ningún modelo.
+     *
+     * Existe porque la IA es un añadido: si se acabó la cuota, si el
+     * proveedor está caído o si él prefiere escribirlo exacto, tiene que
+     * poder. Va por el mismo actuador, con la inversa guardada antes de
+     * aplicar y la misma auditoría — no es una segunda vía de escritura,
+     * es la misma sin la parte de adivinar.
+     */
+    api.post('/pactos', async (req, res) => {
+      if (!d.aMano) {
+        return res.code(503).send({ error: 'No puedo tocar el calendario ahora mismo' })
+      }
+      const p = NuevoPacto.parse(req.body)
+      const r = await d.aMano.ensenarPacto(p)
+      return r.ok ? r : res.code(400).send({ error: r.motivo })
+    })
+
+    /** Cancelar un bloque del día tocándolo. Aquí no hay nada que resolver. */
+    api.post('/jornada/:instanciaId/cancelar', async (req, res) => {
+      if (!d.aMano) {
+        return res.code(503).send({ error: 'No puedo tocar el calendario ahora mismo' })
+      }
+      const { instanciaId } = z.object({ instanciaId: z.string().min(1) }).parse(req.params)
+      const { fecha } = Fecha.parse(req.body ?? {})
+      const r = await d.aMano.cancelarEvento(instanciaId, fecha)
+      return r.ok ? r : res.code(400).send({ error: r.motivo })
+    })
 
     api.post('/acciones/:id/juzgar', async (req, res) => {
       const { id } = Id.parse(req.params)

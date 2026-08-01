@@ -148,6 +148,18 @@ export function crearEnlacePublico(d: DepsEnlace) {
       return r
     },
 
+    /**
+     * La dirección de AHORA.
+     *
+     * Hace falta porque el túnel se rehace solo y la del `.env` puede ser
+     * de hace dos arranques. Es lo que contesta «/enlace» por Telegram —el
+     * único canal que sigue vivo justo cuando la app no funciona— y sin
+     * ella no hay forma de que él averigüe qué poner en Vercel.
+     */
+    url(): string {
+      return tunel?.url ?? d.urlConocida
+    },
+
     detener(): void {
       vivo = false
       tunel?.detener()

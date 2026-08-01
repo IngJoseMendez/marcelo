@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useApp } from './contexto'
+import { FormaAnotar } from './FormaAMano'
 import { diasHasta, duracion, hora, relativa } from '@/lib/tiempo'
 import type { Bandeja, Intencion } from '@/lib/tipos'
 
@@ -95,11 +96,13 @@ export function VistaBandeja({
           <button className="btn" type="button" onClick={() => hablar()}>Anotar algo</button>
         </div>
 
+        <FormaAnotar />
+
         {bandeja.intenciones.length === 0 ? (
           <div className="tarjeta vacio" data-anim>
             <strong>La bandeja está vacía</strong>
-            Lo que le digas por el botón de abajo cae aquí, con su prioridad y
-            cuánto toma, listo para meterlo en un hueco.
+            Háblale, o escríbelo tú mismo aquí arriba. Cae aquí con su prioridad
+            y cuánto toma, listo para meterlo en un hueco.
           </div>
         ) : (
           <div className="intenciones">

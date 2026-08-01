@@ -6,6 +6,7 @@ import type { ResultadoDeshacer, ServicioDeshacer } from './deshacer.ts'
 import type { ServicioResumen } from './resumen.ts'
 import type { ServicioPropuestas } from './propuestas.ts'
 import type { ServicioAgenda } from './agendar.ts'
+import type { ServicioAMano } from './a-mano.ts'
 
 export interface DepsConversacion {
   instruccion: ServicioInstruccion
@@ -18,8 +19,32 @@ export interface DepsConversacion {
   propuestas?: ServicioPropuestas
   /** Aceptar una propuesta pasa por aquí, como cualquier otra escritura. */
   agenda?: ServicioAgenda
+  /**
+   * Hacer las cosas sin que nadie tenga que entenderlas.
+   *
+   * Con esto los comandos a mano existen; sin esto, se dice que no se
+   * puede. Va por el mismo actuador y la misma inversa que todo lo demás.
+   */
+  aMano?: ServicioAMano
+  /** Para «/anotar». Apuntar algo no necesita ningún modelo. */
+  intenciones?: {
+    crear(i: { titulo: string; duracionMin: number; origen: 'texto' | 'voz' }):
+      Promise<{ id: number; titulo: string }>
+  }
+  /** Para «/enlace»: la dirección de AHORA, que es la que nadie sabe. */
+  enlacePublico?: () => string
   /** Sólo decide por dónde vuelve la respuesta, nunca qué se hace. */
   canal?: 'telegram' | 'web'
+}
+
+/** «90» → «hora y media». Nadie apunta cosas en minutos sueltos. */
+function enPalabras(min: number): string {
+  if (min < 60) return `${min} min`
+  if (min === 60) return '1 hora'
+  if (min === 90) return 'hora y media'
+  const h = Math.floor(min / 60)
+  const resto = min % 60
+  return resto ? `${h} h ${resto} min` : `${h} horas`
 }
 
 export interface Respuesta {
@@ -43,7 +68,83 @@ const AYUDA = [
   '/hoy — lo que he hecho hoy por mi cuenta',
   '/huecos — dónde te cabe lo que tienes pendiente',
   '/deshacer — devolver lo último como estaba',
+  '',
+  'Y si la IA está caída o sin cuota, esto funciona igual:',
+  '',
+  '/anotar comprar café · 30m',
+  '/clase martes,jueves 10:00 12:00 Laboratorio',
+  '/enlace — la dirección para la app',
 ].join('\n')
+
+/**
+ * Lo mismo, sin depender de que ningún modelo entienda nada.
+ *
+ * No es una comodidad: es lo que hace que la asistente siga siendo una
+ * agenda el día que se acabe la cuota, se caiga el proveedor o él prefiera
+ * escribirlo exacto. El intérprete es un atajo para hablar bonito, no el
+ * único camino hacia sus propios datos.
+ */
+const AYUDA_MANO = [
+  'A mano, sin pasar por la IA:',
+  '',
+  '📝  /anotar <qué> · <cuánto>',
+  '     /anotar estudiar cálculo · 2h',
+  '     /anotar llamar al banco        (media hora por defecto)',
+  '',
+  '📅  /clase <días> <desde> <hasta> <nombre>',
+  '     /clase martes,jueves 10:00 12:00 Laboratorio',
+  '     /clase lun,mie,vie 07:00 08:00 Gimnasio',
+  '',
+  '🔗  /enlace — por dónde te alcanza la app',
+].join('\n')
+
+/** Lunes es 1, como en Luxon y como en la RRULE. */
+const DIAS: Record<string, number> = {
+  lunes: 1, lun: 1, l: 1,
+  martes: 2, mar: 2, ma: 2,
+  miercoles: 3, 'miércoles': 3, mie: 3, 'mié': 3, mi: 3, x: 3,
+  jueves: 4, jue: 4, j: 4,
+  viernes: 5, vie: 5, v: 5,
+  sabado: 6, 'sábado': 6, sab: 6, 'sáb': 6, s: 6,
+  domingo: 7, dom: 7, d: 7,
+}
+
+/**
+ * «2h», «90m», «hora y media». Devuelve minutos, o null si no dice nada.
+ *
+ * Deliberadamente cortito: lo que no se entienda cae al valor por defecto
+ * en vez de rechazar la nota entera. Perder la duración es un detalle;
+ * perder lo que quería apuntar, no.
+ */
+export function minutosDe(texto: string): number | null {
+  const t = texto.trim().toLowerCase()
+  if (!t) return null
+  if (/^(una )?hora y media$/.test(t)) return 90
+  if (/^(media hora|30)$/.test(t)) return 30
+  if (/^(una )?hora$/.test(t)) return 60
+
+  const m = /^(\d+(?:[.,]\d+)?)\s*(h|hora|horas|m|min|minuto|minutos)?$/.exec(t)
+  if (!m) return null
+  const n = Number(m[1]!.replace(',', '.'))
+  if (!Number.isFinite(n) || n <= 0) return null
+  // Sin unidad, un número pequeño son horas y uno grande minutos: nadie
+  // apunta «3 minutos» y a nadie le caben «120 horas».
+  const unidad = m[2] ?? (n <= 12 ? 'h' : 'm')
+  return Math.round(unidad.startsWith('h') ? n * 60 : n)
+}
+
+/** «martes,jueves» o «lun mie vie». Lo que no sea un día, fuera. */
+export function diasDe(texto: string): number[] {
+  const partes = texto.toLowerCase().split(/[,\s/y]+/).filter(Boolean)
+  const dias = partes.map((p) => DIAS[p.replace(/\.$/, '')]).filter((n): n is number => !!n)
+  return [...new Set(dias)].sort((a, b) => a - b)
+}
+
+const HORA = /^([01]?\d|2[0-3]):([0-5]\d)$/
+const aHora = (t: string): string | null => {
+  const m = HORA.exec(t.trim())
+  return m ? `${m[1]!.padStart(2, '0')}:${m[2]}` : null
+}
 
 /**
  * El canal de instrucciones, sin saber por dónde entra.
@@ -150,9 +251,85 @@ export function crearServicioConversacion(d: DepsConversacion) {
         : { texto: 'Todavía no llevo la crónica del día.' }]
     }
 
+    if (nombre === '/mano' || nombre === '/manual') return [{ texto: AYUDA_MANO }]
+
+    // ── lo que funciona sin cerebro ────────────────────────────
+    // Estos tres no tocan el intérprete ni el modelo: lo que él escribió ya
+    // dice exactamente qué hacer, y no hay nada que entender.
+
+    if (nombre === '/anotar') return anotar(resto.join(' '))
+    if (nombre === '/clase' || nombre === '/pacto') return ensenar(resto)
+
+    if (nombre === '/enlace') {
+      // La pregunta que nadie puede contestar desde la app cuando la app no
+      // funciona: cuál es la dirección de AHORA. El túnel gratuito la
+      // estrena en cada arranque, y la de Vercel se queda con la de ayer.
+      const url = d.enlacePublico?.()
+      if (!url) {
+        return [{ texto: 'Ahora mismo no tengo dirección pública. '
+          + 'Abre el túnel en la pantalla de configuración de la laptop.' }]
+      }
+      return [{
+        texto: `La app me alcanza en:\n\n${url}\n\nSi te dice «el asistente no `
+          + 'contesta», es que Vercel se quedó con la dirección de antes: '
+          + 'ponla ahí como API_BASE y redespliega.',
+      }]
+    }
+
     // Mandar esto al intérprete sería gastar una llamada al modelo para
     // que conteste que no entendió una barra.
     return [{ texto: `No conozco «${nombre}».\n\n${AYUDA}` }]
+  }
+
+  /** «/anotar estudiar cálculo · 2h» */
+  async function anotar(argumento: string): Promise<Mensaje[]> {
+    const crudo = argumento.trim()
+    if (!crudo) {
+      return [{ texto: 'Dime qué anoto.\n\n/anotar comprar café · 30m' }]
+    }
+    if (!d.intenciones) {
+      return [{ texto: 'La bandeja no está conectada; no puedo anotar nada.' }]
+    }
+
+    // El separador es opcional a propósito: sin él, todo es el título y la
+    // duración cae al valor de siempre. Rechazar una nota por no llevar un
+    // punto medio sería absurdo.
+    const [titulo = '', duracion = ''] = crudo.split(/\s*[·|]\s*/)
+    const minutos = minutosDe(duracion) ?? 30
+    if (!titulo.trim()) return [{ texto: 'Dime qué anoto.' }]
+
+    const r = await d.intenciones.crear({
+      titulo: titulo.trim().slice(0, 200),
+      duracionMin: minutos,
+      origen: 'texto',
+    })
+    return [{
+      texto: `Anotado: «${r.titulo}» · ${enPalabras(minutos)}.`,
+      botones: d.propuestas ? [{ texto: '🗓  ¿Dónde me cabe?', dato: 'huecos' }] : undefined,
+    }]
+  }
+
+  /** «/clase martes,jueves 10:00 12:00 Laboratorio» */
+  async function ensenar(partes: string[]): Promise<Mensaje[]> {
+    if (!d.aMano) {
+      return [{ texto: 'No puedo tocar el calendario ahora mismo.' }]
+    }
+    const [diasCrudos = '', desde = '', hasta = '', ...nombre] = partes
+    const dias = diasDe(diasCrudos)
+    const inicio = aHora(desde)
+    const fin = aHora(hasta)
+    const titulo = nombre.join(' ').trim()
+
+    if (!dias.length || !inicio || !fin || !titulo) {
+      return [{
+        texto: 'Así no me sale. Va en este orden:\n\n'
+          + '/clase martes,jueves 10:00 12:00 Laboratorio\n\n'
+          + 'días · desde · hasta · cómo se llama',
+      }]
+    }
+
+    const r = await d.aMano.ensenarPacto({ titulo, dias, horaInicio: inicio, horaFin: fin })
+    return [{ texto: r.ok ? r.mensaje : `No pude: ${r.motivo}` }]
   }
 
   return {
@@ -253,6 +430,10 @@ export function crearServicioConversacion(d: DepsConversacion) {
       }
 
       if (accion === 'deshacer-algo') return { mensajes: [await menuDeshacer()] }
+
+      // El botón que sale al anotar algo a mano: enseñarle dónde le cabe
+      // sin obligarlo a escribir otro comando.
+      if (accion === 'huecos') return { mensajes: await menuHuecos() }
 
       // Un botón de un mensaje viejo, de una versión anterior, o de nadie.
       return { aviso: 'Ese botón ya no sirve', mensajes: [] }

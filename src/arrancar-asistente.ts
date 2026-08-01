@@ -37,6 +37,8 @@ import { crearServicioDeshacer } from './servicios/deshacer.ts'
 import { crearServicioInstruccion } from './servicios/instruccion.ts'
 import { crearServicioResumen } from './servicios/resumen.ts'
 import { crearServicioConversacion } from './servicios/conversacion.ts'
+import { crearServicioAMano } from './servicios/a-mano.ts'
+import { redondearDuracion } from './dominio/intenciones.ts'
 import { crearCanalTelegram } from './adaptadores/telegram.ts'
 import { crearEnlacePublico } from './configuracion/enlace.ts'
 import { arrancarConfigurador } from './configuracion/servidor.ts'
@@ -345,9 +347,34 @@ export async function arrancarAsistente(config: Config): Promise<void> {
 
   // Telegram y la app son dos entradas del mismo intérprete: lo único que
   // cambia es por dónde vuelve la respuesta.
+  /**
+   * Todo lo que se puede hacer sin que nadie tenga que entender nada.
+   *
+   * Mismo actuador, misma inversa antes de aplicar, misma auditoría. Lo
+   * único que se salta es la parte de interpretar, porque cuando él escribe
+   * «/clase martes 10:00 12:00 Laboratorio» no queda nada que adivinar.
+   */
+  const aMano = crearServicioAMano({
+    reloj, calendario, repoCompromisos, repoAcciones,
+    calendarId: config.google.calendarId,
+  })
+
   canal?.conectar(crearServicioConversacion({
     instruccion, deshacer, transcriptor, resumen: resumen ?? undefined,
-    propuestas, agenda,
+    propuestas, agenda, aMano,
+    // Apuntar algo no necesita ningún modelo, y es lo que más se hace.
+    intenciones: {
+      // La duración cae a una de las cuatro casillas que la bandeja
+      // conoce: quien escribe «45m» quiere decir «como media hora», no
+      // que le rechacen la nota por no saberse el catálogo.
+      crear: (i) => repoIntenciones.crear({
+        ...i, detalle: null, prioridad: 'normal', venceEl: null,
+        duracionMin: redondearDuracion(i.duracionMin),
+      }),
+    },
+    // Cuál es la dirección de AHORA: la pregunta que no se puede contestar
+    // desde la app justo cuando la app no funciona.
+    enlacePublico: () => enlace?.url() ?? config.tunel.url,
     canal: 'telegram',
   }))
 
@@ -379,6 +406,7 @@ export async function arrancarAsistente(config: Config): Promise<void> {
       tesoro,
       propuestas,
       acceso: canal ? crearServicioAcceso({ notificador: canal.notificador }) : undefined,
+      aMano,
     },
   })
 
