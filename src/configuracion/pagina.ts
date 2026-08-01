@@ -431,6 +431,24 @@ async function cargarProveedores() {
   pintarProveedor();
 }
 
+async function refrescarVersion() {
+  var v = await (await fetch("/api/version")).json();
+  var caja = $("[data-bloque=\"actualizar\"]");
+  if (!caja) return;
+  caja.dataset.salud = !v.esRepo ? "pendiente" : v.hayQueActualizar ? "parcial" : "listo";
+  $(".detalle", caja).textContent = !v.esRepo ? "no se sabe"
+    : v.hayQueActualizar ? v.detras + " por traer" : "al día";
+
+  var texto;
+  if (v.corriendo) texto = "Actualizando… " + (v.ultima || "");
+  else if (!v.esRepo) texto = "Esto no se bajó con git, así que no me sé actualizar sola.";
+  else if (v.sucio) texto = "Hay archivos cambiados a mano aquí. No voy a pisarlos: avísale a Jose.";
+  else if (v.hayQueActualizar) texto = "Tienes la " + v.version + " y hay " + v.detras
+    + " cambio" + (v.detras === 1 ? "" : "s") + " nuevo" + (v.detras === 1 ? "" : "s") + ". Lo último: “" + v.novedad + "”";
+  else texto = "Estás en lo último (" + v.version + ").";
+  $("#version-estado").innerHTML = '<div class="req-estado" style="font-size:14px">' + texto + "</div>";
+}
+
 async function refrescarVigilia() {
   var r = await (await fetch('/api/vigilia')).json();
   var caja = $('[data-bloque="vigilia"]');
@@ -456,9 +474,11 @@ document.addEventListener('click', async function (e) {
 refrescar();
 refrescarRequisitos();
 refrescarVigilia();
+refrescarVersion();
 cargarProveedores();
 setInterval(refrescar, 15000);
 setInterval(refrescarVigilia, 20000);
+setInterval(refrescarVersion, 12000);
 // Mientras algo se instala hay que mirar más seguido, para poder contarlo.
 setInterval(function () { refrescarRequisitos(); }, 4000);
 `
@@ -494,6 +514,17 @@ function bloque(id: string, titulo: string, cuerpo: string): string {
 }
 
 export function paginaConfiguracion(d: DatosPagina): string {
+  const actualizar = bloque('actualizar', 'Traerme las mejoras', `
+<p class="sub">Cuando Jose publique algo nuevo, esto lo trae. No hay que abrir
+ninguna terminal ni saber qué es git.</p>
+<div id="version-estado" style="margin:16px 0"></div>
+<button class="accion" data-ruta="/api/actualizar" data-esperando="actualizando…">Buscar y traer</button>
+<div class="aviso ojo" style="margin-top:16px"><b>No se pierde nada.</b> Tu
+configuración vive en un archivo que no está en el repositorio, y tus datos en un
+disco de Docker aparte del proyecto. Actualizar sólo cambia el código; las claves,
+los permisos de Google, tu chat de Telegram y todo lo que ella ha aprendido siguen
+donde estaban.</div>`)
+
   const requisitos = bloque('requisitos', 'Lo que necesita esta máquina', `
 <p class="sub">Antes de nada, miro qué hay instalado y qué no. Lo que falte te lo
 pongo yo desde aquí — <b>pero te pregunto cada vez</b>: instalar cosas en tu
@@ -756,6 +787,7 @@ esta clave se fue con él, los respaldos cifrados no sirven de nada.</p>
 
   ${requisitos}
   ${vigilia}
+  ${actualizar}
   ${base}
   ${groq}
   ${google}

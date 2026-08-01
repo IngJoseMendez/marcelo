@@ -62,6 +62,36 @@ export const PROVEEDORES: readonly Proveedor[] = [
     },
   },
   {
+    id: 'cloudflare',
+    nombre: 'Cloudflare Workers AI',
+    // Lleva el id de cuenta dentro, así que hay que editarla. Se deja el
+    // hueco a la vista en vez de un campo vacío: así se ve qué falta.
+    baseUrl: 'https://api.cloudflare.com/client/v4/accounts/TU_ID_DE_CUENTA/ai/v1',
+    donde: 'https://dash.cloudflare.com/profile/api-tokens',
+    precio: 'gratis-con-limite',
+    voz: true,
+    nota: 'La mejor alternativa si Groq no te deja entrar: **ya tienes cuenta de '
+      + 'Cloudflare** por el túnel. Capa gratuita diaria, y trae Whisper grande. '
+      + 'Cambia TU_ID_DE_CUENTA por el id que sale en el panel (Workers & Pages → '
+      + 'a la derecha, «Account ID»), y crea un token con permiso de Workers AI.',
+    preferidos: {
+      transcriptor: ['@cf/openai/whisper-large-v3-turbo', '@cf/openai/whisper'],
+      extractor: ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-3.1-70b-instruct'],
+      clasificador: ['@cf/meta/llama-3.1-8b-instruct-fast', '@cf/meta/llama-3.1-8b-instruct'],
+    },
+  },
+  {
+    id: 'huggingface',
+    nombre: 'Hugging Face',
+    baseUrl: 'https://router.huggingface.co/v1',
+    donde: 'https://huggingface.co/settings/tokens',
+    precio: 'gratis-con-limite',
+    voz: false,
+    nota: 'Se entra con correo y contraseña, sin depender de Google ni GitHub — '
+      + 'útil si otros no te dejan registrarte. Capa gratuita pequeña, y el '
+      + 'catálogo cambia seguido. Dale a Probar y te digo qué hay hoy.',
+  },
+  {
     id: 'openrouter',
     nombre: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',

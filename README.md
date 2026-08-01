@@ -46,6 +46,27 @@ Guía manual, por si quieres entender qué pasa por debajo:
 
 ---
 
+## Actualizar
+
+Cuando publiques algo nuevo, Marcelo abre el asistente y le da a **Buscar y
+traer**. Hace `git pull --ff-only`, pone las dependencias nuevas, corre las
+pruebas y se reinicia sola. No necesita saber qué es git ni abrir una terminal.
+
+**No se pierde nada, y no es casualidad:**
+
+| | Dónde vive | Qué le hace una actualización |
+|---|---|---|
+| Configuración (`.env`) | archivo fuera de git | nada: `pull` ni lo mira |
+| Datos | volumen de Docker, fuera del proyecto | nada |
+| Esquema de la base | migraciones | se aplican solas al arrancar |
+| Código | git | eso es lo único que cambia |
+
+Se usa `--ff-only` a propósito: si hubiera cambios locales, el tirón falla y lo
+dice, en vez de abrir un conflicto de merge en la máquina de alguien que no
+sabría qué hacer con él.
+
+---
+
 ## Cómo funciona
 
 Dos entradas, **un solo lugar que muta estado**:

@@ -23,6 +23,7 @@ import {
 import {
   comandoDeTarea, comandosDeVigilia, enPalabras, revisarVigilia,
 } from './vigilia.ts'
+import { pasosDeActualizacion, revisarVersion } from './actualizar.ts'
 
 /**
  * El asistente de configuración.
@@ -185,6 +186,80 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
     return {
       ok: true,
       mensaje: `Instalando ${requisito.nombre}. Tarda varios minutos; te voy diciendo.`,
+    }
+  })
+
+  // ── actualizarse ────────────────────────────────────────────
+
+  const actualizacion = { corriendo: false, lineas: [] as string[], ok: false, hecho: false }
+
+  app.get('/api/version', async () => ({
+    ...(await revisarVersion(correr)),
+    corriendo: actualizacion.corriendo,
+    ultima: actualizacion.lineas.at(-1) ?? '',
+    hecho: actualizacion.hecho,
+    ok: actualizacion.ok,
+  }))
+
+  app.post('/api/actualizar', async () => {
+    if (actualizacion.corriendo) {
+      return { ok: true, mensaje: 'Ya estoy actualizándome. Dame un momento.' }
+    }
+
+    const estado = await revisarVersion(correr)
+    if (!estado.esRepo) {
+      return { ok: false, mensaje: 'Esto no se bajó con git, así que no me sé actualizar sola.' }
+    }
+    if (estado.sucio) {
+      return {
+        ok: false,
+        // Pisarlos sería peor: alguien los puso ahí por algo.
+        mensaje: 'Hay archivos cambiados a mano en esta carpeta. No voy a pisarlos: '
+          + 'avísale a Jose antes de actualizar.',
+      }
+    }
+    if (!estado.hayQueActualizar) {
+      return { ok: true, mensaje: `Ya estás en lo último (${estado.version}).` }
+    }
+
+    actualizacion.corriendo = true
+    actualizacion.hecho = false
+    actualizacion.lineas = []
+
+    void (async () => {
+      try {
+        for (const paso of pasosDeActualizacion()) {
+          actualizacion.lineas.push(`${paso.que}…`)
+          const r = await correr(paso.programa, paso.argumentos)
+          if (!r.ok && !paso.opcional) {
+            actualizacion.lineas.push(`falló al ${paso.que}: ${r.salida.trim().slice(-200)}`)
+            actualizacion.ok = false
+            actualizacion.hecho = true
+            actualizacion.corriendo = false
+            return
+          }
+          if (!r.ok) actualizacion.lineas.push(`aviso: ${paso.que} no terminó bien`)
+        }
+        actualizacion.lineas.push('listo, reiniciando')
+        actualizacion.ok = true
+        actualizacion.hecho = true
+        actualizacion.corriendo = false
+        // El 7 vuelve a arrancarme con el código nuevo. Las migraciones
+        // corren solas al arrancar, así que no hay más que hacer.
+        setTimeout(() => process.exit(7), 1200)
+      } catch (e) {
+        actualizacion.lineas.push(String(e))
+        actualizacion.hecho = true
+        actualizacion.corriendo = false
+      }
+    })()
+
+    return {
+      ok: true,
+      mensaje: `Trayendo ${estado.detras} cambio${estado.detras === 1 ? '' : 's'}. `
+        + 'Tarda un par de minutos y me reinicio sola al terminar.',
+      avisos: ['Tu configuración y tus datos no se tocan: el .env no está en git '
+        + 'y la base de datos vive en Docker, fuera del proyecto.'],
     }
   })
 
