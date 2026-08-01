@@ -1,5 +1,5 @@
 import { abrirTunel, type OpcionesTunel, type Tunel } from './tunel.ts'
-import { publicarVariables, redesplegar } from './vercel.ts'
+import { leerVariable, publicarVariables, redesplegar } from './vercel.ts'
 
 /**
  * Mantener viva la dirección por la que la app alcanza esta laptop.
@@ -36,6 +36,7 @@ export interface DepsEnlace {
   abrir?: (o: OpcionesTunel) => Promise<Tunel>
   publicar?: typeof publicarVariables
   desplegar?: typeof redesplegar
+  leer?: typeof leerVariable
 }
 
 export interface Resultado {
@@ -54,6 +55,7 @@ export function crearEnlacePublico(d: DepsEnlace) {
   const abrir = d.abrir ?? abrirTunel
   const publicar = d.publicar ?? publicarVariables
   const desplegar = d.desplegar ?? redesplegar
+  const leer = d.leer ?? leerVariable
 
   let tunel: Tunel | null = null
   let vivo = true
@@ -100,8 +102,22 @@ export function crearEnlacePublico(d: DepsEnlace) {
 
     const url = tunel.url
     if (url === d.urlConocida) {
-      // Túnel con nombre, o suerte: nada que contarle a nadie.
-      return { url, cambio: false, publicado: false }
+      // Túnel con nombre, o suerte: la dirección es la de siempre. Pero
+      // «no cambió» no quiere decir «Vercel la sabe»: si el túnel se abrió
+      // antes de poner el token de Vercel —el orden en que uno rellena esa
+      // pantalla— allá no llegó nunca, y saltarse la publicación aquí la
+      // dejaría sin llegar para siempre. Una consulta barata lo zanja.
+      const puesta = await leer(
+        { token: d.vercel?.token ?? '', proyecto: d.vercel?.proyecto ?? '' }, 'API_BASE')
+      if (puesta !== null && puesta.replace(/\/+$/, '') === url.replace(/\/+$/, '')) {
+        return { url, cambio: false, publicado: false }
+      }
+      if (puesta === null && !d.vercel?.token) {
+        return { url, cambio: false, publicado: false }
+      }
+      d.registro?.warn({ url, enVercel: puesta },
+        'la dirección no cambió, pero Vercel no la tenía: se la cuento')
+      return { ...(await contarleAVercel(url)), cambio: false }
     }
 
     await d.guardar(url)

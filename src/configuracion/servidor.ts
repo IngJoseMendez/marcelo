@@ -16,6 +16,7 @@ import {
 import { CLAVES, canjearCodigo, urlDeConsentimiento, type Proveedor } from './oauth.ts'
 import { abrirTunel, type Tunel } from './tunel.ts'
 import { publicarVariables, redesplegar, variablesDeLaApp } from './vercel.ts'
+import { probarCadena } from './cadena.ts'
 import {
   comandoDeInstalacion, gestorDe, plataformaActual, porId, revisarRequisitos,
   type Ejecutar,
@@ -85,7 +86,50 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
 
   const estado = (): Revision => revisar(env)
 
+  /**
+   * Contarle a Vercel dónde está la laptop, y redesplegar para que se
+   * entere. Los dos pasos van juntos siempre: poner las variables sin
+   * redesplegar deja la app corriendo con las de antes, que se ve
+   * exactamente igual que no haber hecho nada.
+   */
+  async function publicarYDesplegar(): Promise<{ ok: boolean; mensaje: string }> {
+    const variables = variablesDeLaApp(env)
+    if (!variables.API_BASE) {
+      return { ok: false, mensaje: 'Abre primero el túnel: sin dirección pública la app no sabe a dónde llamar.' }
+    }
+
+    const puesta = await publicarVariables(
+      { token: env.VERCEL_TOKEN ?? '', proyecto: env.VERCEL_PROYECTO ?? '' }, variables)
+    if (!puesta.ok) return puesta
+
+    const gancho = env.VERCEL_GANCHO ?? ''
+    if (!gancho) {
+      return {
+        ok: true,
+        mensaje: `${puesta.mensaje} Falta el gancho: redesplega a mano desde Vercel para que se apliquen.`,
+      }
+    }
+    const despliegue = await redesplegar(gancho)
+    return { ok: despliegue.ok, mensaje: `${puesta.mensaje} ${despliegue.mensaje}` }
+  }
+
   const app = Fastify({ logger: false })
+
+  /**
+   * Los formularios de HTML no mandan JSON.
+   *
+   * El botón de «Aplicar y arrancar» es un `<form method="post">` —a
+   * propósito: tiene que navegar a la respuesta, porque el proceso se va a
+   * morir justo después y un `fetch` se quedaría colgado—. Manda
+   * `x-www-form-urlencoded`, que Fastify no entiende de fábrica, así que
+   * devolvía un 415 en crudo. El único botón que cierra la configuración
+   * era el único que no funcionaba.
+   */
+  app.addContentTypeParser(
+    'application/x-www-form-urlencoded', { parseAs: 'string' },
+    (_req, cuerpo, hecho) => {
+      hecho(null, Object.fromEntries(new URLSearchParams(String(cuerpo))))
+    })
 
   app.get('/', async (_req, res) => {
     res.type('text/html; charset=utf-8')
@@ -576,6 +620,13 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
       })
       await guardar({
         URL_PUBLICA: tunel.url,
+        // Encenderlo aquí y no dejarlo en manos de nadie: `cloudflared` es
+        // un proceso HIJO de la asistente, así que se muere con ella. Sin
+        // esto, abrir el túnel funcionaba hasta el primer reinicio y
+        // después la app decía «sin conexión» apuntando a una dirección
+        // que ya no existe. Quien apretó el botón quiere el túnel, y lo
+        // quiere también mañana.
+        TUNEL_AUTO: 'true',
         ...(cuerpo.TUNEL_NOMBRE?.trim() ? { TUNEL_NOMBRE: cuerpo.TUNEL_NOMBRE.trim() } : {}),
       })
       return {
@@ -619,30 +670,38 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
     // Con `oLoGuardado` y no con `?? ''`: si él vuelve a esta pantalla y
     // guarda con el token de Vercel en blanco, lo de antes tiene que
     // seguir ahí. Blanquearlo dejaría la app sin poder actualizarse sola.
+    // RESPALDO_CLAVE va en la lista aunque no tenga nada que ver con
+    // Vercel: es un campo editable de este bloque, y era el único que se
+    // podía escribir y no se guardaba. Justo el peor — si él pega ahí la
+    // clave que tenía apuntada y se descarta en silencio, los respaldos
+    // viejos dejan de poder abrirse y nadie se entera hasta que hacen falta.
     await guardar(Object.fromEntries([
-      'API_TOKEN', 'CODIGO_ACCESO', 'SECRETO_SESION', 'APP_URL',
+      'API_TOKEN', 'CODIGO_ACCESO', 'SECRETO_SESION', 'RESPALDO_CLAVE', 'APP_URL',
       'VERCEL_TOKEN', 'VERCEL_PROYECTO', 'VERCEL_GANCHO',
     ].map((clave) => [clave, oLoGuardado(cuerpo, clave)])))
 
-    const variables = variablesDeLaApp(env)
-    if (!variables.API_BASE) {
-      return { ok: false, mensaje: 'Abre primero el túnel: sin dirección pública la app no sabe a dónde llamar.' }
-    }
-
-    const puesta = await publicarVariables(
-      { token: env.VERCEL_TOKEN ?? '', proyecto: env.VERCEL_PROYECTO ?? '' }, variables)
-    if (!puesta.ok) return puesta
-
-    const gancho = env.VERCEL_GANCHO ?? ''
-    if (!gancho) {
-      return {
-        ok: true,
-        mensaje: `${puesta.mensaje} Falta el gancho: redesplega a mano desde Vercel para que se apliquen.`,
-      }
-    }
-    const despliegue = await redesplegar(gancho)
-    return { ok: despliegue.ok, mensaje: `${puesta.mensaje} ${despliegue.mensaje}` }
+    return publicarYDesplegar()
   })
+
+  // ── por qué la app dice «sin conexión» ──────────────────────
+
+  app.get('/api/cadena', async () => probarCadena({
+    puertoLocal: puertoServicio,
+    urlPublica: env.URL_PUBLICA ?? '',
+    apiToken: env.API_TOKEN ?? '',
+    vercel: {
+      token: env.VERCEL_TOKEN ?? '',
+      proyecto: env.VERCEL_PROYECTO ?? '',
+      gancho: env.VERCEL_GANCHO ?? '',
+    },
+  }))
+
+  // Reparar es exactamente lo mismo que publicar: volver a contarle a
+  // Vercel lo que hay ahora y redesplegar para que lo agarre. Se le da su
+  // propio botón porque quien llega aquí no viene a configurar nada —viene
+  // de ver la app vacía— y no tiene por qué adivinar que el arreglo está
+  // escondido en un formulario tres pasos más arriba.
+  app.post('/api/cadena/reparar', async () => publicarYDesplegar())
 
   app.post('/api/reiniciar', async (_req, res) => {
     res.type('text/html; charset=utf-8')

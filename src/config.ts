@@ -86,18 +86,27 @@ export function cargarConfig(env: Record<string, string | undefined>) {
   }
   const v = r.data
 
-  // Sin cerebro no hay nada que arrancar. Ya no lo puede exigir el esquema
-  // —la clave puede venir con cualquiera de los dos nombres, y un modelo
-  // que corre en esta misma máquina no pide ninguna— así que se comprueba
-  // aquí, que es donde se sabe de dónde salió cada valor.
+  /**
+   * El cerebro es un añadido, no un requisito.
+   *
+   * Sin él la asistente no entiende correos ni órdenes habladas — que es
+   * mucho— pero todo lo demás sigue en pie: la agenda, la bandeja, los
+   * pactos, el libro, el deshacer y las pantallas. Marcelo puede anotar y
+   * enseñarle cosas con un formulario, a mano.
+   *
+   * Antes esto lanzaba y no arrancaba nada. Que una IA caída, sin cuota o
+   * mal configurada tumbe una agenda entera es desproporcionado: lo que
+   * hace falta es que avise, no que se muera.
+   */
   const claveLlm = v.LLM_API_KEY || v.GROQ_API_KEY
   const urlLlm = v.LLM_BASE_URL || v.GROQ_BASE_URL
   const enEstaMaquina = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(urlLlm)
-  if (!claveLlm && !enEstaMaquina) {
-    throw new Error('Configuración inválida: falta LLM_API_KEY (o GROQ_API_KEY)')
-  }
+  const modeloLlm = v.LLM_MODELO_EXTRACTOR || v.GROQ_MODELO_EXTRACTOR
+  const hayCerebro = Boolean(modeloLlm) && (Boolean(claveLlm) || enEstaMaquina)
 
   return Object.freeze({
+    /** Con esto se sabe qué se puede hacer y qué hay que decir que no. */
+    hayCerebro,
     urlBaseDatos: v.DATABASE_URL,
     zonaHoraria: v.ZONA_HORARIA,
 

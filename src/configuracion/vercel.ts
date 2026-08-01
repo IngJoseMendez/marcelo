@@ -115,6 +115,38 @@ export async function publicarVariables(
 }
 
 /**
+ * Qué tiene Vercel puesto ahora mismo.
+ *
+ * Hace falta porque «la dirección no cambió» no implica «Vercel la sabe».
+ * Si el túnel se abrió antes de poner el token de Vercel —el orden natural
+ * en el que uno rellena la pantalla— la dirección quedó guardada aquí y
+ * allá nunca llegó. Sin esta consulta, un túnel con nombre fijo se saltaría
+ * la publicación para siempre y la app no funcionaría jamás, sin que nada
+ * en ningún log dijera por qué.
+ *
+ * `null` significa «no se pudo mirar», que no es lo mismo que «no está»:
+ * ante la duda conviene publicar, no darlo por hecho.
+ */
+export async function leerVariable(
+  d: DepsVercel, clave: string
+): Promise<string | null> {
+  const buscar = d.buscar ?? fetch
+  if (!d.token.trim() || !d.proyecto.trim()) return null
+  try {
+    const r = await buscar(
+      conEquipo(
+        `${API}/v9/projects/${encodeURIComponent(d.proyecto.trim())}/env?decrypt=true`,
+        d.equipo),
+      { headers: { authorization: `Bearer ${d.token.trim()}` } })
+    if (!r.ok) return null
+    const cuerpo = (await r.json()) as { envs?: Array<{ key: string; value?: string }> }
+    return (cuerpo.envs ?? []).find((e) => e.key === clave)?.value ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Redesplegar por gancho.
  *
  * Cambiar una variable no toca el despliegue que ya está sirviendo: Vercel

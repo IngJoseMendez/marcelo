@@ -370,6 +370,10 @@ document.addEventListener('click', async function (e) {
     if (boton.dataset.ruta.indexOf('/vigilia') === 0 || boton.dataset.ruta.indexOf('/api/vigilia') === 0) {
       await refrescarVigilia();
     }
+    // Publicar en Vercel, abrir el tunel o reparar cambian justo lo que
+    // mira el diagnostico. Volver a mirarlo ahi mismo es la diferencia
+    // entre «dice que lo hizo» y «se ve que funciono».
+    if (/vercel|tunel|cadena/.test(boton.dataset.ruta)) await refrescarCadena();
     if (respuesta.rellenar) {
       Object.keys(respuesta.rellenar).forEach(function (k) {
         var campo = $('input[name="' + k + '"]');
@@ -531,6 +535,36 @@ async function refrescarVigilia() {
     .join('');
 }
 
+// ── por qué la app sale vacía ─────────────────────────────────
+// Cuatro saltos y un solo síntoma. Sin esto, «no me sale nada» obliga a
+// adivinar cuál de los cuatro se rompió.
+var MARCAS = { bien: '✓', mal: '✕', aviso: '!', sin_datos: '?' };
+
+async function refrescarCadena() {
+  var caja = $('[data-bloque="cadena"]');
+  if (!caja) return;
+  var c;
+  try {
+    c = await (await fetch('/api/cadena')).json();
+  } catch (x) {
+    return;
+  }
+  caja.dataset.salud = c.ok ? 'listo' : 'pendiente';
+  $('.detalle', caja).textContent = c.ok
+    ? 'la app te ve'
+    : (c.culpable ? 'falla en: ' + c.culpable.titulo.toLowerCase() : 'sin conexión');
+
+  $('#cadena-lista').innerHTML = c.eslabones.map(function (e) {
+    return '<div class="req-estado" data-salud="' + e.estado + '">'
+      + '<b>' + (MARCAS[e.estado] || '·') + ' ' + e.titulo + '</b><br>' + e.detalle
+      + (e.arreglo ? '<br><i>' + e.arreglo + '</i>' : '')
+      + '</div>';
+  }).join('');
+
+  var reparar = $('#cadena-reparar');
+  reparar.style.display = c.reparable && !c.ok ? '' : 'none';
+}
+
 document.addEventListener('click', async function (e) {
   var boton = e.target.closest('[data-instalar]');
   if (!boton) return;
@@ -547,10 +581,15 @@ refrescar();
 refrescarRequisitos();
 refrescarVigilia();
 refrescarVersion();
+refrescarCadena();
 cargarProveedores();
 setInterval(refrescar, 15000);
 setInterval(refrescarVigilia, 20000);
-// Esto hace un  de verdad: cada doce segundos era una llamada
+// Cada vuelta sale a internet dos veces (el tunel y Vercel), asi que no
+// puede ir rapido. Quien esta arreglando esto tiene el boton de reparar,
+// que refresca al terminar.
+setInterval(refrescarCadena, 120000);
+// Esto hace un git fetch de verdad: cada doce segundos era una llamada
 // de red por minuto que nadie pidio.
 setInterval(refrescarVersion, 300000);
 // Mientras algo se instala hay que mirar más seguido, para poder contarlo.
@@ -851,6 +890,18 @@ esta clave se fue con él, los respaldos cifrados no sirven de nada.</p>
   placeholder="https://api.vercel.com/v1/integrations/deploy/…" spellcheck="false">
 <button class="accion" data-ruta="/api/vercel" data-esperando="hablando con Vercel…">Publicar en Vercel</button>`)
 
+  const cadena = bloque('cadena', '¿Por qué la app sale vacía?', `
+<p class="sub">Entre la pantalla de tu celular y los datos de esta laptop hay cuatro
+saltos. Cuando uno falla, los cuatro se ven igual: <b>todo vacío, sin conexión</b>.
+Esto los recorre de verdad y te dice cuál se rompió.</p>
+<div id="cadena-lista"></div>
+<button class="accion" id="cadena-reparar" style="display:none"
+  data-ruta="/api/cadena/reparar" data-esperando="reparando…">Reparar</button>
+<div class="aviso ojo" style="margin-top:16px"><b>La trampa más común:</b> Vercel sólo
+lee las variables <b>al desplegar</b>. Cambiarlas no toca la app que ya está en el
+aire — se queda con las de antes, todo parece bien configurado, y aun así sale vacía.
+Por eso reparar también redespliega, y por eso tarda un minuto en notarse.</div>`)
+
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -880,6 +931,7 @@ esta clave se fue con él, los respaldos cifrados no sirven de nada.</p>
   ${telegram}
   ${tunel}
   ${app}
+  ${cadena}
   ${outlook}
 
   <div class="final" id="final" style="display:none">

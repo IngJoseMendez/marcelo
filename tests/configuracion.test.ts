@@ -321,6 +321,8 @@ function enlaceDePrueba(o: {
   urlConocida: string
   urlNueva: string
   vercel?: { token: string; proyecto: string; gancho: string }
+  /** Lo que Vercel ya tiene apuntado. `undefined` = lo mismo que urlConocida. */
+  enVercel?: string | null
 }) {
   const guardadas: string[] = []
   const publicadas: Array<Record<string, string>> = []
@@ -330,6 +332,7 @@ function enlaceDePrueba(o: {
     puertoLocal: 3000,
     urlConocida: o.urlConocida,
     vercel: o.vercel ?? { token: 't', proyecto: 'p', gancho: 'g' },
+    leer: async () => (o.enVercel === undefined ? o.urlConocida : o.enVercel),
     guardar: async (url) => { guardadas.push(url) },
     abrir: async () => ({ url: o.urlNueva, efimera: true, detener() {} }),
     publicar: async (_d, vars) => {
@@ -374,6 +377,59 @@ test('si la dirección es la misma, no se redespliega por costumbre', async () =
   assert.deepEqual(p.publicadas, [])
   assert.deepEqual(p.desplegados, [],
     'un redespliegue de más deja la app caída un minuto sin ninguna falta')
+})
+
+/**
+ * El caso que dejaba la app muerta para siempre y en silencio.
+ *
+ * Uno abre el túnel primero y pone el token de Vercel después — es el orden
+ * en que está la pantalla. En ese hueco la dirección se guarda aquí y allá
+ * nunca llega. Si además el túnel tiene nombre fijo, la dirección no vuelve
+ * a cambiar nunca, así que «no cambió, no publico» significaba no publicar
+ * jamás: la app decía «sin conexión» hasta el fin de los tiempos con todo
+ * aparentemente bien configurado.
+ */
+test('la dirección no cambió pero Vercel no la tenía: se la cuenta igual', async () => {
+  const p = enlaceDePrueba({
+    urlConocida: 'https://fija.trycloudflare.com',
+    urlNueva: 'https://fija.trycloudflare.com',
+    enVercel: null,
+  })
+
+  const r = await p.enlace.encender()
+
+  assert.equal(r.cambio, false, 'la dirección es la misma: no hay nada que guardar')
+  assert.equal(r.publicado, true)
+  assert.deepEqual(p.publicadas, [{ API_BASE: 'https://fija.trycloudflare.com' }])
+  assert.deepEqual(p.desplegados, ['g'])
+})
+
+test('si Vercel apunta a otra dirección, se corrige aunque el túnel no cambiara', async () => {
+  const p = enlaceDePrueba({
+    urlConocida: 'https://fija.trycloudflare.com',
+    urlNueva: 'https://fija.trycloudflare.com',
+    enVercel: 'https://la-de-otra-instalacion.trycloudflare.com',
+  })
+
+  await p.enlace.encender()
+
+  assert.deepEqual(p.publicadas, [{ API_BASE: 'https://fija.trycloudflare.com' }])
+})
+
+// Sin token no hay a quién preguntar ni a quién contarle: molestar con un
+// aviso en cada arranque a quien no usa la app no aporta nada.
+test('sin token de Vercel, una dirección que no cambió no arma ruido', async () => {
+  const p = enlaceDePrueba({
+    urlConocida: 'https://fija.trycloudflare.com',
+    urlNueva: 'https://fija.trycloudflare.com',
+    vercel: { token: '', proyecto: '', gancho: '' },
+    enVercel: null,
+  })
+
+  const r = await p.enlace.encender()
+
+  assert.equal(r.publicado, false)
+  assert.deepEqual(p.publicadas, [])
 })
 
 test('sin credenciales de Vercel avisa en vez de creer que quedó bien', async () => {

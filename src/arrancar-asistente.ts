@@ -210,6 +210,12 @@ export async function arrancarAsistente(config: Config): Promise<void> {
     : null
 
   async function drenarCola(): Promise<void> {
+    // Sin cerebro no hay con qué entender un correo. Se deja la cola
+    // QUIETA en vez de vaciarla: los correos siguen ahí, y el día que se
+    // configure un modelo se procesan. Sacarlos y descartarlos sería
+    // perderlos por no tener algo que es opcional.
+    if (!config.hayCerebro) return
+
     await recargarReglas()
     for (const item of await cola.tomarPendientes(10)) {
       const cuenta = porCuenta.get(item.cuentaId)
@@ -262,6 +268,11 @@ export async function arrancarAsistente(config: Config): Promise<void> {
   }
 
   async function ponerseAlDiaTodas(): Promise<void> {
+    // Sin cerebro no se avanza el cursor. Si se avanzara, los correos de
+    // hoy quedarian por vistos sin que nadie los haya leido, y no habria
+    // forma de recuperarlos cuando se configure un modelo.
+    if (!config.hayCerebro) return
+
     for (const cuenta of conectadas) {
       try {
         const n = await sync.ponerseAlDia(cuenta)
@@ -486,4 +497,11 @@ export async function arrancarAsistente(config: Config): Promise<void> {
     config.modoSombra
       ? 'Asistente arriba EN MODO SOMBRA: observa y registra, no toca el calendario'
       : 'Asistente arriba EN MODO REAL: va a modificar el calendario')
+
+  if (!config.hayCerebro) {
+    log.warn(
+      "SIN CEREBRO: no voy a leer correos ni a entender lo que me digan. "
+      + "La agenda, la bandeja, los pactos y el libro funcionan igual, a mano. "
+      + "Los correos se quedan en la cola hasta que configures un modelo.")
+  }
 }

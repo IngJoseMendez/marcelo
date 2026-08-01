@@ -11,8 +11,37 @@ test('rechaza configuración sin DATABASE_URL', () => {
   assert.throws(() => cargarConfig({ GROQ_API_KEY: 'x' }), /DATABASE_URL/)
 })
 
-test('rechaza configuración sin clave del cerebro', () => {
-  assert.throws(() => cargarConfig({ DATABASE_URL: minimo.DATABASE_URL }), /LLM_API_KEY/)
+/**
+ * Antes esto lanzaba. Que una IA sin cuota, caída o mal escrita tumbara una
+ * agenda entera es desproporcionado: el cerebro es un añadido, no el
+ * producto. Sin él no entiende correos ni órdenes habladas —que es mucho—
+ * pero la agenda, la bandeja, los pactos, el libro y el deshacer siguen en
+ * pie, y él puede anotar y enseñarle cosas a mano con un formulario.
+ */
+test('sin cerebro arranca igual, y lo dice', () => {
+  const c = cargarConfig({ DATABASE_URL: minimo.DATABASE_URL })
+  assert.equal(c.hayCerebro, false)
+  assert.equal(c.groq.apiKey, '')
+})
+
+test('con clave pero sin modelo tampoco hay cerebro: falta la mitad', () => {
+  assert.equal(cargarConfig(minimo).hayCerebro, false)
+})
+
+test('hay cerebro cuando están la clave y el modelo', () => {
+  const c = cargarConfig({ ...minimo, GROQ_MODELO_EXTRACTOR: 'llama-3.3-70b-versatile' })
+  assert.equal(c.hayCerebro, true)
+})
+
+// Un modelo en la propia máquina (Ollama, LM Studio) no pide clave: exigirla
+// dejaría sin cerebro justo a quien no depende de nadie para tenerlo.
+test('un modelo local cuenta como cerebro aunque no haya clave', () => {
+  const c = cargarConfig({
+    DATABASE_URL: minimo.DATABASE_URL,
+    LLM_BASE_URL: 'http://localhost:11434/v1',
+    LLM_MODELO_EXTRACTOR: 'llama3.1',
+  })
+  assert.equal(c.hayCerebro, true)
 })
 
 test('usa America/Bogota por defecto', () => {

@@ -68,7 +68,7 @@ function bloque(
   }
 }
 
-/** Sólo los dos que hacen falta para leer correo: la voz es aparte. */
+/** Los que hacen falta para ENTENDER correo. Sin ellos se arranca igual. */
 const MODELOS = ['LLM_MODELO_CLASIFICADOR', 'LLM_MODELO_EXTRACTOR']
 
 /**
@@ -103,12 +103,20 @@ export function revisar(entrada: Env): Revision {
         return m ? `${m[2]} en ${m[1]}` : 'configurada'
       }),
 
-    bloque('groq', 'El cerebro', true, MODELOS, env,
+    // No es imprescindible, aunque duela. Sin cerebro la asistente no
+    // entiende correos ni órdenes habladas, pero la agenda, la bandeja,
+    // los pactos y el libro siguen funcionando a mano — y arrancar con
+    // media asistente es mejor que no arrancar.
+    bloque('groq', 'El cerebro', false, MODELOS, env,
       (e) => {
         const quien = e.LLM_PROVEEDOR?.trim() || 'groq'
         const oye = (e.VOZ_MODELO || e.LLM_MODELO_TRANSCRIPTOR)?.trim()
         return `${quien} · ${e.LLM_MODELO_EXTRACTOR}${oye ? ` · oye con ${oye}` : ' · sin voz'}`
-      }),
+      },
+      'Sin cerebro no lee tus correos ni entiende lo que le dices: se queda '
+      + 'en agenda de toda la vida. Todo lo demás funciona —ver el día, anotar '
+      + 'pendientes, enseñarle compromisos, cancelar cosas— pero a mano, con '
+      + 'formularios, en vez de hablando.'),
 
     bloque('google', 'Google (Gmail + Calendar)', false,
       ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'], env,
