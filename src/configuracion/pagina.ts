@@ -176,6 +176,14 @@ details.tecnico[open] > summary { border-bottom:1px solid var(--borde); }
 details.tecnico > label:first-of-type { margin-top:10px; }
 details.tecnico > input:last-child { margin-bottom:16px; }
 
+/* Lo que se pierde por saltarse un bloque. Va arriba del cuerpo, no
+   escondido al final: es lo que decide si vale la pena hacerlo ahora. */
+.pierde {
+  margin:16px 0 0; padding:11px 13px; border-radius:11px; font-size:13.5px;
+  background:color-mix(in srgb,var(--ojo) 10%,transparent); color:var(--ojo);
+}
+.pierde:empty { display:none; }
+
 ul.lista { margin:10px 0 0; padding:0; list-style:none; }
 ul.lista > li {
   position:relative; padding:0 0 12px 20px; color:var(--tinta-suave); font-size:15px;
@@ -231,9 +239,38 @@ function pintar(revision) {
     var caja = $('[data-bloque="' + b.id + '"]');
     if (!caja) return;
     caja.dataset.salud = b.salud;
-    $('.detalle', caja).textContent = b.salud === 'listo' ? b.detalle : (b.imprescindible ? 'hace falta' : 'opcional');
+    $('.detalle', caja).textContent = b.salud === 'listo'
+      ? b.detalle
+      : (b.imprescindible ? 'hace falta' : 'puedes dejarlo para después');
     if (b.salud === 'listo') listos++;
+
+    // Qué deja de funcionar si se salta. Decir sólo «opcional» es no decir
+    // nada: quien lo lee no sabe si se salta un adorno o media asistente.
+    var nota = $('.pierde', caja);
+    if (nota) {
+      nota.textContent = b.salud === 'listo' ? '' : (b.pierde || '');
+      nota.style.display = b.salud === 'listo' || !b.pierde ? 'none' : '';
+    }
   });
+
+  // Lo que quedó sin hacer, en la tarjeta final. Arrancar sin esto es una
+  // decisión legítima; no saber qué se está dejando, no.
+  var pendientes = revision.bloques.filter(function (b) {
+    return b.salud !== 'listo' && b.pierde;
+  });
+  var caja = $('#pendientes');
+  if (caja) {
+    caja.innerHTML = pendientes.length === 0
+      ? ''
+      : '<p class="sub" style="margin:0 0 10px"><b>Te faltan '
+        + pendientes.length + ' cosas.</b> Puedes arrancar igual y volver aquí '
+        + 'cuando quieras: esta pantalla sigue abierta en '
+        + '<span class="mono">localhost:' + (revision.puerto || location.port) + '</span> '
+        + 'mientras ella trabaje.</p>'
+        + '<ul class="lista">' + pendientes.map(function (b) {
+            return '<li><b>' + b.titulo + '</b> — ' + b.pierde + '</li>';
+          }).join('') + '</ul>';
+  }
 
   // Rellenar lo que ya se guardó, para que volver aquí no parezca empezar
   // de cero. Nunca se pisa un campo que él esté escribiendo ahora mismo.
@@ -509,7 +546,7 @@ function bloque(id: string, titulo: string, cuerpo: string): string {
     <span class="detalle"></span>
     ${FLECHA}
   </button>
-  <div class="cuerpo">${cuerpo}<div class="aviso"></div></div>
+  <div class="cuerpo"><p class="pierde"></p>${cuerpo}<div class="aviso"></div></div>
 </section>`
 }
 
@@ -807,6 +844,8 @@ esta clave se fue con él, los respaldos cifrados no sirven de nada.</p>
       <label>Y entra con este código</label>
       <div class="copiar"><span class="mono" id="app-codigo">—</span><button type="button">copiar</button></div>
     </div>
+
+    <div id="pendientes" style="text-align:left;max-width:34rem;margin:22px auto 0"></div>
 
     <p class="sub" style="margin:18px auto 0">Arranco en <b>modo sombra</b>: observo y
     anoto todo lo que haría, pero no toco tu calendario hasta que tú lo digas.</p>

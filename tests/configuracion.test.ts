@@ -489,3 +489,35 @@ test('una cadena que no es de Postgres se rechaza antes de intentar nada', async
   assert.equal(r.ok, false)
   assert.equal(intentado, false)
 })
+
+// ── lo opcional: qué se pierde si se salta ──────────────────────
+
+test('cada bloque que se puede saltar dice qué deja de funcionar', () => {
+  // Poner sólo «opcional» es no decir nada: quien lo lee no sabe si se
+  // está saltando un adorno o media asistente.
+  const r = revisar({})
+
+  for (const b of r.bloques.filter((x) => !x.imprescindible)) {
+    assert.ok(b.pierde.length > 40, `${b.id} no explica qué se pierde`)
+  }
+})
+
+test('lo de Telegram avisa de que es lo que más se nota', () => {
+  // Es «opcional» pero sin él no hay voz, ni resumen de las 9, ni respaldo
+  // fuera de la laptop, ni código de un solo uso para entrar.
+  const telegram = revisar({}).bloques.find((b) => b.id === 'telegram')!
+
+  assert.match(telegram.pierde, /resumen/)
+  assert.match(telegram.pierde, /respaldo/)
+})
+
+test('saltarse lo opcional no impide arrancar', () => {
+  const r = revisar({
+    ...MINIMO,
+    GOOGLE_CLIENT_ID: 'x', GOOGLE_CLIENT_SECRET: 'y', GOOGLE_REFRESH_TOKEN: 'z',
+  })
+
+  assert.equal(r.listo, true, 'con lo imprescindible basta')
+  assert.ok(r.bloques.some((b) => !b.imprescindible && b.salud !== 'listo'),
+    'y queda constancia de lo que falta, para poder volver')
+})

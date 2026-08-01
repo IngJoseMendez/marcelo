@@ -103,6 +103,8 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
   app.get('/api/estado', async () => ({
     ...estado(),
     ...valoresRecordados(env),
+    // Para que la pantalla pueda decir a qué dirección volver.
+    puerto,
     // Lo que él necesita para abrirla en el celular cuando todo esté listo.
     app: { url: env.APP_URL ?? '', codigo: env.CODIGO_ACCESO ?? '' },
   }))

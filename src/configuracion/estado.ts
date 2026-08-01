@@ -22,6 +22,14 @@ export interface Bloque {
   falta: string[]
   /** Sin esto la asistente no arranca. */
   imprescindible: boolean
+  /**
+   * Qué deja de funcionar si se salta.
+   *
+   * Decir sólo «opcional» es no decir nada: quien lo lee no sabe si se
+   * está saltando un adorno o media asistente. Y saltarse Telegram es
+   * quedarse sin voz, sin resumen y sin respaldo fuera de la laptop.
+   */
+  pierde: string
 }
 
 export interface Revision {
@@ -48,14 +56,14 @@ export function asomar(valor: string | undefined, deja = 4): string {
 
 function bloque(
   id: IdBloque, titulo: string, imprescindible: boolean,
-  claves: string[], env: Env, detalle: (env: Env) => string
+  claves: string[], env: Env, detalle: (env: Env) => string, pierde = ''
 ): Bloque {
   const falta = claves.filter((c) => !hay(env, c))
   const salud: Salud = falta.length === 0
     ? 'listo'
     : falta.length === claves.length ? 'pendiente' : 'parcial'
   return {
-    id, titulo, salud, falta, imprescindible,
+    id, titulo, salud, falta, imprescindible, pierde,
     detalle: salud === 'listo' ? detalle(env) : '',
   }
 }
@@ -104,21 +112,26 @@ export function revisar(entrada: Env): Revision {
 
     bloque('google', 'Google (Gmail + Calendar)', false,
       ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'], env,
-      (e) => e.GOOGLE_CUENTA?.trim() || 'conectado'),
+      (e) => e.GOOGLE_CUENTA?.trim() || 'conectado',
+      'Sin Google no lee tu correo ni toca tu calendario. Es el motor: sin él o sin Outlook, no hay nada que hacer.'),
 
     bloque('outlook', 'Outlook', false,
       ['MS_CLIENT_ID', 'MS_CLIENT_SECRET', 'MS_REFRESH_TOKEN'], env,
-      (e) => e.MS_CUENTA?.trim() || 'conectado'),
+      (e) => e.MS_CUENTA?.trim() || 'conectado',
+      'Sólo hace falta si además recibes correo en Outlook. Con Google conectado, todo lo demás funciona igual.'),
 
     bloque('telegram', 'Telegram', false,
       ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'], env,
-      (e) => e.TELEGRAM_BOT_NOMBRE?.trim() ? `@${e.TELEGRAM_BOT_NOMBRE}` : 'emparejado'),
+      (e) => e.TELEGRAM_BOT_NOMBRE?.trim() ? `@${e.TELEGRAM_BOT_NOMBRE}` : 'emparejado',
+      'Pone «opcional» pero es lo que más se nota: sin Telegram no puedes hablarle ni mandarle notas de voz, no llega el resumen de las 9, el respaldo se queda en la laptop y para entrar a la app no hay código de un solo uso.'),
 
     bloque('tunel', 'Túnel', false, ['URL_PUBLICA'], env,
-      (e) => e.URL_PUBLICA ?? ''),
+      (e) => e.URL_PUBLICA ?? '',
+      'Sin túnel la app abre pero dice «sin conexión» en todas las pantallas: no hay por dónde alcanzar esta laptop. Telegram sigue funcionando.'),
 
     bloque('app', 'La app', false, ['API_TOKEN'], env,
-      (e) => (e.APP_URL?.trim() ? e.APP_URL : `token ${asomar(e.API_TOKEN)}`)),
+      (e) => (e.APP_URL?.trim() ? e.APP_URL : `token ${asomar(e.API_TOKEN)}`),
+      'Sin esto no hay app en el teléfono. La asistente trabaja igual y le hablas por Telegram, pero te pierdes la Jornada, la Crónica y el Tesoro.'),
   ]
 
   const porId = new Map(bloques.map((b) => [b.id, b]))
