@@ -114,17 +114,45 @@ export async function arrancarConfigurador(o: OpcionesConfigurador = {}) {
   const plataforma = plataformaActual(process.platform)
 
   /** Correr un programa y quedarse con lo que diga, sin que nada reviente. */
-  const correr: Ejecutar = (programa, argumentos) =>
-    new Promise((cumplir) => {
+  /**
+   * Correr un programa con reloj.
+   *
+   * El timeout no es una precaución teórica: `git fetch` sobre HTTPS se
+   * queda esperando credenciales, y sin límite la promesa no se resuelve
+   * nunca — la petición se cuelga y la página gira para siempre. Un
+   * comando que no contesta en 20 segundos no va a contestar.
+   */
+  const correr = (programa: string, argumentos: string[], limiteMs = 20_000) =>
+    new Promise<{ ok: boolean; salida: string }>((cumplir) => {
       // `shell: true` en Windows porque winget, docker y cloudflared se
       // instalan como .cmd y sin shell no se encuentran en el PATH.
-      const proceso = spawn(programa, argumentos, { shell: plataforma === 'windows' })
+      const proceso = spawn(programa, argumentos, {
+        shell: plataforma === 'windows',
+        // Que git falle en vez de abrir una ventana pidiendo contraseña
+        // que nadie va a ver, colgando el proceso hasta el fin de los días.
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' },
+      })
+
       let salida = ''
+      let cerrado = false
+      const acabar = (ok: boolean) => {
+        if (cerrado) return
+        cerrado = true
+        clearTimeout(reloj)
+        cumplir({ ok, salida })
+      }
+
+      const reloj = setTimeout(() => {
+        proceso.kill()
+        salida += `\n(se pasó de ${Math.round(limiteMs / 1000)} s y lo corté)`
+        acabar(false)
+      }, limiteMs)
+
       const recoger = (t: Buffer) => { salida += t.toString() }
       proceso.stdout?.on('data', recoger)
       proceso.stderr?.on('data', recoger)
-      proceso.on('error', () => cumplir({ ok: false, salida }))
-      proceso.on('close', (codigo) => cumplir({ ok: codigo === 0, salida }))
+      proceso.on('error', () => acabar(false))
+      proceso.on('close', (codigo) => acabar(codigo === 0))
     })
 
   /**

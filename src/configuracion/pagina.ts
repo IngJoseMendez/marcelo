@@ -288,6 +288,17 @@ function pintar(revision) {
     (revision.listo ? 'ya puede arrancar' : 'faltan ' + revision.faltantes + ' para arrancar');
   $('#final').style.display = revision.listo ? 'block' : 'none';
 
+  // Si ya está trabajando, esta pantalla NO es una puesta en marcha: es el
+  // sitio donde se cambian cosas. Decir «vamos a dejarla lista» a alguien
+  // que la tiene funcionando parece que se hubiera perdido todo.
+  if (revision.listo) {
+    $('h1').textContent = 'Ya está trabajando';
+    $('header .sub').innerHTML = 'Esta pantalla es para <b>cambiar algo</b>, no para '
+      + 'empezar de cero: tu configuración está puesta y ella está leyendo tu correo. '
+      + 'Toca el bloque que quieras y dale a <b>Aplicar y arrancar</b> al final.';
+    $('#final h2').textContent = 'Aplicar los cambios';
+  }
+
   var app = revision.app || {};
   $('#app-url').textContent = app.url || '(pon la dirección de tu app arriba)';
   $('#app-codigo').textContent = app.codigo || '(genera los secretos arriba)';
@@ -533,9 +544,17 @@ refrescarVersion();
 cargarProveedores();
 setInterval(refrescar, 15000);
 setInterval(refrescarVigilia, 20000);
-setInterval(refrescarVersion, 12000);
+// Esto hace un  de verdad: cada doce segundos era una llamada
+// de red por minuto que nadie pidio.
+setInterval(refrescarVersion, 300000);
 // Mientras algo se instala hay que mirar más seguido, para poder contarlo.
-setInterval(function () { refrescarRequisitos(); }, 4000);
+// Cada vuelta lanza un proceso por requisito. A 4 s eran cien procesos
+// por minuto para siempre, y eso se nota en la maquina. Rapido solo
+// mientras hay algo instalandose; el resto del tiempo, de vez en cuando.
+setInterval(function () {
+  if (instalando) refrescarRequisitos();
+}, 5000);
+setInterval(refrescarRequisitos, 60000);
 `
 
 const FLECHA = '<span class="flecha">›</span>'

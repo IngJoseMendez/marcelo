@@ -61,6 +61,22 @@ import type { SumideroCalendario } from './puertos/sumidero-calendario.ts'
 export async function arrancarAsistente(config: Config): Promise<void> {
   const log = pino({ level: config.nivelLog })
 
+  // ── La guía, ANTES que nada ───────────────────────────────────
+  //
+  // Va primero a propósito. Es la herramienta con la que se arregla una
+  // configuración rota, así que no puede esperar detrás de lo que está
+  // roto: si el modelo no existe y hay cien correos atascados, abrir
+  // localhost:3210 y encontrar que nadie escucha es justo el momento en
+  // que alguien se rinde.
+  //
+  // No necesita ni base de datos ni credenciales: sólo el .env.
+  try {
+    const guia = await arrancarConfigurador({ registro: log, rutaEnv: config.rutaEnv })
+    log.info({ url: guia.url }, 'asistente de configuración disponible')
+  } catch (e) {
+    log.warn({ err: e }, 'no se pudo abrir el asistente de configuración')
+  }
+
   const db = desdePostgres(crearPoolPostgres(config.urlBaseDatos))
   await migrar(db)
 
@@ -258,8 +274,14 @@ export async function arrancarAsistente(config: Config): Promise<void> {
   }
 
   // Recuperación al arrancar: la laptop pudo estar apagada.
-  await ponerseAlDiaTodas()
-  await drenarCola()
+  //
+  // Sin `await`: cien correos atrasados tardan minutos, y esperarlos aquí
+  // dejaba la API y la guía sin levantar todo ese rato. Nada se pierde por
+  // hacerlo de fondo — la cola vive en Postgres y el cron de cada minuto
+  // recoge lo que quede.
+  void ponerseAlDiaTodas()
+    .then(() => drenarCola())
+    .catch((e) => log.error({ err: e }, 'fallo en la puesta al día del arranque'))
 
   // ── Lo que consume la app ─────────────────────────────────────
   const jornada = crearServicioJornada({
@@ -408,23 +430,6 @@ export async function arrancarAsistente(config: Config): Promise<void> {
   // Long polling: sale a preguntar en vez de esperar a que le toquen, que es
   // lo único que funciona sin IP pública.
   canal?.arrancar()
-
-  // ── El asistente de configuración, también con ella en marcha ──
-  //
-  // Y en ESTE proceso, no en uno aparte. Es la diferencia entre que el
-  // botón «aplicar y reiniciar» funcione o no: lanzado por su cuenta, ese
-  // botón mataba el configurador y dejaba a la asistente corriendo con la
-  // configuración vieja — guardaba el cambio y no lo aplicaba, que es la
-  // peor mezcla posible.
-  //
-  // Sigue atado a 127.0.0.1, aparte del Fastify que sale por el túnel.
-  try {
-    const guia = await arrancarConfigurador({ registro: log, rutaEnv: config.rutaEnv })
-    log.info({ url: guia.url }, 'asistente de configuración disponible')
-  } catch (e) {
-    // Que no se pueda abrir la guía no puede impedir que ella trabaje.
-    log.warn({ err: e }, 'no se pudo abrir el asistente de configuración')
-  }
 
   // ── El enlace con la app ──────────────────────────────────────
   // Se rehace al arrancar porque el túnel gratuito estrena dirección cada
