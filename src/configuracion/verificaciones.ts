@@ -60,6 +60,79 @@ interface CatalogoGroq {
 }
 
 /**
+ * Cuando no se puede preguntar el catálogo, se le habla.
+ *
+ * Es una prueba **más fuerte** que listar modelos, no un consuelo: listar
+ * dice que la clave vale; hablar dice que la clave vale, que el modelo
+ * existe y que la ruta de completado es la correcta. Cuesta un token, y
+ * ese token compra saber que el día que llegue un correo esto va a
+ * funcionar.
+ */
+async function probarHablando(
+  apiKey: string,
+  url: string,
+  quien: string,
+  preferidos: Preferencias,
+  buscar: Buscar
+): Promise<Prueba & { eleccion?: Eleccion }> {
+  const extractor = preferidos.extractor?.[0]
+  const clasificador = preferidos.clasificador?.[0] ?? extractor
+  const transcriptor = preferidos.transcriptor?.[0] ?? ''
+
+  if (!extractor) {
+    return falla(`${quien} no publica su catálogo y no sé qué modelo pedirle. `
+      + 'Escribe la dirección de otro proveedor.')
+  }
+
+  return intentar(async () => {
+    const r = await buscar(`${url}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(apiKey.trim() ? { authorization: `Bearer ${apiKey.trim()}` } : {}),
+      },
+      // Lo más corto que se puede pedir: sólo hace falta saber que contesta.
+      body: JSON.stringify({
+        model: extractor,
+        messages: [{ role: 'user', content: 'di ok' }],
+        max_tokens: 4,
+      }),
+    })
+
+    if (r.status === 401 || r.status === 403) {
+      return falla(`${quien} no acepta esa clave. Genera otra y vuelve a intentar.`)
+    }
+    if (r.status === 404) {
+      // Ni catálogo ni chat: entonces sí, la dirección no es.
+      return falla('Ahí no hay una API de este tipo. Revisa la dirección: suele acabar en /v1.')
+    }
+    if (!r.ok) {
+      const cuerpo = (await r.json().catch(() => ({}))) as CatalogoGroq
+      return falla(cuerpo.error?.message
+        ?? `${quien} respondió ${r.status} al probar el modelo ${extractor}.`)
+    }
+
+    const eleccion: Eleccion = { clasificador: clasificador!, extractor, transcriptor, avisos: [] }
+    return {
+      ok: true,
+      mensaje: `Contesta. Usaré ${extractor} para leer`
+        + `${transcriptor ? ` y ${transcriptor} para oír` : ''}.`,
+      avisos: [`${quien} no publica su catálogo, así que no puedo elegir por ti: `
+        + 'uso los modelos que traigo apuntados. Si algún día retiran uno, '
+        + 'esta prueba te lo va a decir.'],
+      eleccion,
+      guardar: {
+        LLM_API_KEY: apiKey.trim(),
+        LLM_BASE_URL: url,
+        LLM_MODELO_CLASIFICADOR: clasificador!,
+        LLM_MODELO_EXTRACTOR: extractor,
+        ...(transcriptor ? { LLM_MODELO_TRANSCRIPTOR: transcriptor } : {}),
+      },
+    }
+  }, (e) => falla(`No se pudo hablar con ${quien}: ${porque(e)}`))
+}
+
+/**
  * Preguntarle al proveedor qué modelos tiene, y elegir de esa lista.
  *
  * Sirve para cualquiera que hable la API de OpenAI, que es toda la gracia
@@ -91,13 +164,21 @@ export async function probarProveedor(
     if (r.status === 401 || r.status === 403) {
       return falla(`${quien} no acepta esa clave. Genera otra y vuelve a intentar.`)
     }
-    if (r.status === 404) {
-      return falla(`Ahí no hay una API de este tipo. Revisa la dirección: suele acabar en /v1.`)
+    // Hay proveedores que sencillamente no publican su catálogo: Cloudflare
+    // contesta «GET not supported for requested URI» a esta misma ruta, y
+    // otros devuelven 404. Que no se pueda preguntar no significa que no
+    // sirva, así que en vez de rendirse se le hace la pregunta que de
+    // verdad importa — ¿contestas? Y de paso eso desambigua: si el chat
+    // responde, la dirección estaba bien; si tampoco, estaba mal.
+    if (r.status === 404 || r.status === 405) {
+      return probarHablando(apiKey, url, quien, opciones.preferidos ?? {}, buscar)
     }
     if (!r.ok) return falla(cuerpo.error?.message ?? `${quien} respondió ${r.status}`)
 
     const ids = (cuerpo.data ?? []).map((m) => m.id).filter((x): x is string => Boolean(x))
-    if (ids.length === 0) return falla(`${quien} no devolvió ningún modelo.`)
+    if (ids.length === 0) {
+      return probarHablando(apiKey, url, quien, opciones.preferidos ?? {}, buscar)
+    }
 
     const eleccion = elegirModelos(ids, opciones.preferidos ?? {})
 

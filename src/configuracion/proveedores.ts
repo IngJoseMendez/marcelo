@@ -72,6 +72,8 @@ export const PROVEEDORES: readonly Proveedor[] = [
     voz: true,
     nota: 'La mejor alternativa si Groq no te deja entrar: **ya tienes cuenta de '
       + 'Cloudflare** por el túnel. Capa gratuita diaria, y trae Whisper grande. '
+      + 'No publica su catálogo de modelos —lo comprobé—, así que en vez de '
+      + 'elegir por ti pruebo hablándole y uso los que traigo apuntados. '
       + 'Cambia TU_ID_DE_CUENTA por el id que sale en el panel (Workers & Pages → '
       + 'a la derecha, «Account ID»), y crea un token con permiso de Workers AI.',
     preferidos: {
@@ -109,7 +111,9 @@ export const PROVEEDORES: readonly Proveedor[] = [
     donde: 'https://aistudio.google.com/apikey',
     precio: 'gratis-con-limite',
     voz: false,
-    nota: 'Capa gratuita generosa y modelos buenos leyendo texto largo. Ojo: '
+    nota: 'Capa gratuita generosa. AVISO: no pude verificar esta dirección sin '
+      + 'una clave, así que si Probar falla, la de bueno es la que salga en '
+      + 'ai.google.dev/gemini-api/docs/openai. Ojo también: '
       + 'en el plan gratuito Google puede usar lo que le mandes para mejorar sus '
       + 'modelos, y aquí se le mandan correos de una persona real.',
   },

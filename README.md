@@ -144,7 +144,9 @@ casi todos. Se elige en un desplegable del asistente:
 |---|---|---|---|
 | **Groq** | gratis, con límites | sí | Lo que trae puesto. Rápido, y el único gratis con Whisper grande |
 | **OpenAI** | de pago | sí | Con este volumen, pocos dólares al mes |
-| **OpenRouter** | gratis, con límites | no | Una clave para modelos de casi todos, incluidos los `:free` |
+| **OpenRouter** | gratis, con límites | no | Una clave para modelos de casi todos, incluidos los `:free`. **La salida si Groq no te deja entrar** |
+| **Cloudflare Workers AI** | gratis, con límites | sí | Ya tienes cuenta por el túnel. Trae Whisper. No publica catálogo, así que se verifica hablándole |
+| **Hugging Face** | gratis, con límites | no | Se entra con correo y contraseña, sin Google ni GitHub |
 | **Google Gemini** | gratis, con límites | no | Capa gratuita generosa — pero en el plan gratis Google puede entrenar con lo que le mandes |
 | **DeepSeek** | de pago | no | Barato. Servidores en China |
 | **Cerebras** | gratis, con límites | no | Muy rápido, catálogo corto |
@@ -275,7 +277,7 @@ cama.
 
 ```bash
 npm install
-npm test          # 401 pruebas, sin red, en segundos
+npm test          # 410 pruebas, sin red, en segundos
 npm run typecheck
 npm run dev       # con recarga
 

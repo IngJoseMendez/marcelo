@@ -521,3 +521,89 @@ test('saltarse lo opcional no impide arrancar', () => {
   assert.ok(r.bloques.some((b) => !b.imprescindible && b.salud !== 'listo'),
     'y queda constancia de lo que falta, para poder volver')
 })
+
+// ── proveedores que no publican su catálogo ─────────────────────
+
+test('si no se puede listar modelos, se prueba hablándole', async () => {
+  // Cloudflare contesta «GET not supported for requested URI» a /models.
+  // Comprobado contra su API de verdad. Rendirse ahí sería descartar un
+  // proveedor que funciona perfectamente.
+  const { buscar, llamadas } = buscarFalso([
+    { estado: 405, cuerpo: { errors: [{ message: 'GET not supported' }] } },
+    { cuerpo: { choices: [{ message: { content: 'ok' } }] } },
+  ])
+
+  const r = await probarProveedor('token', 'https://ejemplo.test/v1', {
+    nombre: 'Cloudflare',
+    preferidos: { extractor: ['@cf/meta/llama-3.3-70b'], clasificador: ['@cf/meta/llama-3.1-8b'] },
+    buscar,
+  })
+
+  assert.equal(r.ok, true)
+  assert.match(llamadas[1]!.url, /chat\/completions$/)
+  assert.equal(r.guardar!.LLM_MODELO_EXTRACTOR, '@cf/meta/llama-3.3-70b')
+  assert.match(r.avisos!.join(' '), /no publica su catálogo/)
+})
+
+test('hablándole se pide lo más corto posible', async () => {
+  // Verificar no debería costar una respuesta entera.
+  const { buscar, llamadas } = buscarFalso([
+    { estado: 404, cuerpo: {} },
+    { cuerpo: { choices: [] } },
+  ])
+
+  await probarProveedor('t', 'https://ejemplo.test/v1', {
+    preferidos: { extractor: ['modelo-x'] }, buscar,
+  })
+
+  const enviado = JSON.parse(String(llamadas[1]!.init!.body)) as { max_tokens: number }
+  assert.ok(enviado.max_tokens <= 8)
+})
+
+test('si tampoco contesta al hablarle, se dice con el modelo que falló', async () => {
+  const { buscar } = buscarFalso([
+    { estado: 405, cuerpo: {} },
+    { estado: 400, cuerpo: { error: { message: 'model not found: modelo-x' } } },
+  ])
+
+  const r = await probarProveedor('t', 'https://ejemplo.test/v1', {
+    nombre: 'Cloudflare', preferidos: { extractor: ['modelo-x'] }, buscar,
+  })
+
+  assert.equal(r.ok, false)
+  assert.match(r.mensaje, /modelo-x/)
+})
+
+test('sin catálogo y sin modelos apuntados, se admite en vez de adivinar', async () => {
+  const { buscar } = buscarFalso([{ estado: 405, cuerpo: {} }])
+
+  const r = await probarProveedor('t', 'https://ejemplo.test/v1', { buscar })
+
+  assert.equal(r.ok, false)
+  assert.match(r.mensaje, /no sé qué modelo pedirle/)
+})
+
+test('una clave mala al hablarle se distingue de un modelo que no existe', async () => {
+  const { buscar } = buscarFalso([
+    { estado: 405, cuerpo: {} },
+    { estado: 401, cuerpo: {} },
+  ])
+
+  const r = await probarProveedor('mala', 'https://ejemplo.test/v1', {
+    nombre: 'Cloudflare', preferidos: { extractor: ['m'] }, buscar,
+  })
+
+  assert.match(r.mensaje, /no acepta esa clave/)
+})
+
+test('si ni el catálogo ni el chat contestan, ahí sí la dirección está mal', async () => {
+  // Probar el chat desambigua: 404 en /models puede ser «no publico
+  // catálogo»; 404 en los dos ya sólo puede ser una dirección equivocada.
+  const { buscar } = buscarFalso([{ estado: 404, cuerpo: {} }, { estado: 404, cuerpo: {} }])
+
+  const r = await probarProveedor('t', 'https://mal.test/v1', {
+    preferidos: { extractor: ['m'] }, buscar,
+  })
+
+  assert.match(r.mensaje, /Revisa la dirección/)
+})
