@@ -128,3 +128,50 @@ export interface Estado {
   ahora: string | null
   ultimoLatido: string | null
 }
+
+// ── el tesoro ───────────────────────────────────────────────────
+
+export type Categoria =
+  | 'arriendo' | 'servicios' | 'mercado' | 'transporte' | 'salud' | 'educacion'
+  | 'restaurantes' | 'compras' | 'suscripciones' | 'transferencia' | 'retiro'
+  | 'impuestos' | 'ingreso' | 'otros'
+
+export interface Movimiento {
+  id: number
+  fecha: string
+  tipo: 'ingreso' | 'egreso'
+  /** En la unidad menor: $1.240.000 son 124000000. */
+  monto: number
+  moneda: string
+  montoCop: number | null
+  contraparte: string
+  concepto: string | null
+  categoria: Categoria
+  correoId: number | null
+  estado: 'registrado' | 'anulado'
+}
+
+export interface CuentaPorPagar {
+  id: number
+  acreedor: string
+  monto: number
+  moneda: string
+  venceEl: string
+  diasRestantes: number
+}
+
+export interface Tesoro {
+  disponible: boolean
+  motivo?: string
+  desde: string
+  hasta: string
+  ingresos: number
+  egresos: number
+  neto: number
+  porCategoria: Array<{ categoria: Categoria; nombre: string; total: number }>
+  movimientos: Movimiento[]
+  cuentasPorPagar: CuentaPorPagar[]
+  /** Cobros repetidos: mismo comercio, mismo monto, días distintos. */
+  sospechas: Array<{ contraparte: string; monto: number; veces: number }>
+  moneda: string
+}

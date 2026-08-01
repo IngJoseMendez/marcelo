@@ -208,7 +208,7 @@ Las mismas capacidades, desde el teléfono o el computador.
 | **Jornada** | El día, en lista o en rejilla horaria |
 | **Bandeja** | Lo que hay por hacer, listo para caer en un hueco |
 | **Crónica** | Cada acción con su correo origen, su confianza y su botón de deshacer |
-| **Tesoro** | Finanzas (llega con el módulo financiero) |
+| **Tesoro** | Saldo del mes, qué hay por pagar, en qué se fue la plata y cada movimiento |
 | **Pactos** | Los compromisos que le has enseñado |
 | **Invocar** | Botón de voz y campo de texto, siempre a mano |
 

@@ -118,6 +118,60 @@ const cronica = () => ({
   ],
 })
 
+
+/** El libro contable de mentira: un mes con vida, para ver la pantalla. */
+const tesoro = () => {
+  const mes = hoy().slice(0, 7)
+  const dia = (d) => `${mes}-${String(d).padStart(2, '0')}`
+  const mov = (id, d, tipo, monto, contraparte, categoria, concepto = null, moneda = 'COP') =>
+    ({ id, fecha: dia(d), tipo, monto, moneda, montoCop: moneda === 'COP' ? monto : null,
+       contraparte, concepto, categoria, correoId: id, estado: 'registrado' })
+
+  const movimientos = [
+    mov(1, 1, 'ingreso', 320000000, 'Nómina', 'ingreso', 'Quincena'),
+    mov(2, 2, 'egreso', 180000000, 'Inmobiliaria Norte', 'arriendo', 'Arriendo'),
+    mov(3, 3, 'egreso', 24500000, 'Almacenes Éxito', 'mercado'),
+    mov(4, 4, 'egreso', 8990000, 'Rappi', 'restaurantes'),
+    mov(5, 5, 'egreso', 4500000, 'Claro Colombia', 'servicios', 'Plan celular'),
+    mov(6, 6, 'egreso', 3800000, 'Uber', 'transporte'),
+    mov(7, 7, 'egreso', 8990000, 'Rappi', 'restaurantes'),
+    mov(8, 8, 'egreso', 2000, 'OpenAI', 'suscripciones', 'ChatGPT Plus', 'USD'),
+    mov(9, 9, 'ingreso', 45000000, 'Juan Pérez', 'transferencia', 'Nequi'),
+  ]
+
+  const ingresos = movimientos.filter((m) => m.tipo === 'ingreso' && m.moneda === 'COP')
+    .reduce((t, m) => t + m.monto, 0)
+  const egresos = movimientos.filter((m) => m.tipo === 'egreso' && m.moneda === 'COP')
+    .reduce((t, m) => t + m.monto, 0)
+
+  const porCategoria = Object.entries(
+    movimientos.filter((m) => m.tipo === 'egreso' && m.moneda === 'COP')
+      .reduce((acc, m) => ({ ...acc, [m.categoria]: (acc[m.categoria] ?? 0) + m.monto }), {}))
+    .map(([categoria, total]) => ({
+      categoria,
+      nombre: { arriendo: 'Arriendo', mercado: 'Mercado', restaurantes: 'Restaurantes',
+                servicios: 'Servicios', transporte: 'Transporte' }[categoria] ?? categoria,
+      total,
+    }))
+    .sort((a, b) => b.total - a.total)
+
+  return {
+    disponible: true,
+    desde: dia(1), hasta: dia(28),
+    ingresos, egresos, neto: ingresos - egresos,
+    porCategoria,
+    movimientos: [...movimientos].reverse(),
+    cuentasPorPagar: [
+      { id: 1, acreedor: 'Arriendo septiembre', monto: 180000000, moneda: 'COP',
+        venceEl: dia(28), diasRestantes: 2 },
+      { id: 2, acreedor: 'Tarjeta Visa', monto: 62400000, moneda: 'COP',
+        venceEl: dia(28), diasRestantes: 9 },
+    ],
+    sospechas: [{ contraparte: 'Rappi', monto: 8990000, veces: 2 }],
+    moneda: 'COP',
+  }
+}
+
 const pactos = () => ({
   compromisos: [
     { id: 1, titulo: 'Cálculo', alias: ['calculo', 'clase'],
@@ -201,6 +255,7 @@ createServer((req, res) => {
   if (req.method === 'GET' && ruta === '/jornada') return responder(res, 200, jornada())
   if (req.method === 'GET' && ruta === '/cronica') return responder(res, 200, cronica())
   if (req.method === 'GET' && ruta === '/pactos') return responder(res, 200, pactos())
+  if (req.method === 'GET' && ruta === '/tesoro') return responder(res, 200, tesoro())
   if (req.method === 'GET' && ruta === '/bandeja') {
     return responder(res, 200, {
       fecha: hoy(),

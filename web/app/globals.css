@@ -910,6 +910,77 @@ button.rejilla__hueco:active { box-shadow: inset 0 0 0 1.5px var(--linea-2); col
   .fila[data-quien="ella"] .fila__hilo::after { filter: none; opacity: .22; }
 }
 
+
+/* ── 17b. tesoro ────────────────────────────────────────────────
+   El acento violeta NO se usa aquí: marca la mano de la asistente y
+   nada más. Lo que entra y lo que sale son verde y rojo, que son
+   semánticos y viven aparte — es la regla que ordena toda la paleta. */
+
+.saldos { display: flex; flex-direction: column; gap: 10px; }
+.saldos__par { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.saldo--chico { padding: 15px 16px; }
+.saldo__cifra[data-signo='mas']   { color: var(--verde); }
+.saldo__cifra[data-signo='menos'] { color: var(--tinta); }
+.saldo--chico .saldo__cifra[data-signo='menos'] { color: var(--rojo); }
+.saldo__cifra--chica { font-size: 21px; letter-spacing: -.03em; }
+
+/* Lo que hay que pagar. El borde se enciende sólo cuando aprieta: si
+   todo llevara color, el color dejaría de significar urgencia. */
+.deuda__fila { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.deuda__monto { font-size: 15px; font-weight: 650; flex: none; letter-spacing: -.02em; }
+.deuda[data-tono='urgente'] { box-shadow: var(--sombra-1), inset 3px 0 0 var(--rojo); }
+.deuda[data-tono='alta']    { box-shadow: var(--sombra-1), inset 3px 0 0 var(--ambar); }
+
+/* En qué se fue. Barras y no una dona: comparar longitudes es fácil,
+   comparar ángulos no lo es, y aquí lo que importa es el orden. */
+.gastos { padding: 16px; display: flex; flex-direction: column; gap: 13px; }
+.gasto {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: baseline;
+  animation: surgir 420ms var(--entra) backwards;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+.gasto__nombre { font-size: 13.5px; font-weight: 550; letter-spacing: -.01em; }
+.gasto__cifra { font-size: 13px; color: var(--tinta-2); }
+.gasto__barra {
+  grid-column: 1 / -1; height: 5px; border-radius: 99px;
+  background: var(--papel-2); position: relative; overflow: hidden;
+}
+.gasto__barra::after {
+  content: ''; position: absolute; inset: 0 auto 0 0;
+  width: calc(var(--parte, 0) * 100%); border-radius: 99px;
+  background: linear-gradient(90deg, var(--tinta-3), var(--tinta-2));
+  animation: crecer 620ms var(--sal) backwards;
+  animation-delay: calc(var(--i, 0) * 40ms + 120ms);
+}
+@keyframes crecer { from { width: 0 } }
+
+.sospecha { display: block; }
+.sospecha + .sospecha { margin-top: 4px; }
+
+.movimientos { display: flex; flex-direction: column; gap: 8px; }
+.movimiento {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 13px 15px;
+}
+.movimiento__cuerpo { min-width: 0; }
+.movimiento__quien {
+  font-size: 14.5px; font-weight: 600; letter-spacing: -.016em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.movimiento__meta { display: block; font-size: 12px; color: var(--tinta-3); margin-top: 1px; }
+.movimiento__cifras { flex: none; text-align: right; }
+.movimiento__monto { font-size: 14.5px; font-weight: 650; letter-spacing: -.02em; }
+.movimiento[data-tipo='ingreso'] .movimiento__monto { color: var(--verde); }
+.movimiento[data-tipo='egreso']  .movimiento__monto { color: var(--tinta); }
+.movimiento__nota { display: block; font-size: 10.5px; color: var(--tinta-3); margin-top: 1px; }
+
+/* En pantalla ancha el saldo y lo que hay que pagar caben lado a lado. */
+@media (min-width: 1024px) {
+  .app:has(.dock) .saldos { display: grid; grid-template-columns: 1.2fr 1fr; align-items: start; }
+  .app:has(.dock) .saldos__par { grid-template-columns: 1fr 1fr; }
+  .app:has(.dock) .movimientos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+}
+
 /* ── 18. escritorio ─────────────────────────────────────────────
    Hasta aquí todo es un teléfono, y en un monitor eso se veía como un
    teléfono flotando en el medio. De 1024 px para arriba la carcasa se
