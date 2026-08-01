@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, InputFile, type Context } from 'grammy'
+import { Bot, InlineKeyboard, InputFile, Keyboard, type Context } from 'grammy'
 import type { Boton, Mensaje, Notificador } from '../puertos/notificador.ts'
 import type { Audio } from '../puertos/transcriptor.ts'
 import type { ServicioConversacion } from '../servicios/conversacion.ts'
@@ -19,6 +19,120 @@ export interface DepsTelegram {
 
 /** Dos por fila: más estrecho que eso, Telegram parte los textos. */
 const POR_FILA = 2
+
+/**
+ * El teclado de abajo: los botones que están SIEMPRE.
+ *
+ * Hacía falta porque «escribe /anotar» no es una interfaz. Un comando que
+ * hay que recordar y teclear bien no existe para quien no lo sabe, y quien
+ * abre este chat quiere apuntar algo, no aprenderse una sintaxis. Estos
+ * cuatro salen solos al abrir la conversación y no se van nunca.
+ *
+ * Van como teclado de respuesta y no como botones bajo un mensaje a
+ * propósito: los de abajo sobreviven a que la conversación siga, los otros
+ * se pierden hacia arriba en cuanto llegan tres mensajes más.
+ */
+const BOTONES_FIJOS = [
+  ['📝  Anotar algo', '📅  Enseñarle una clase'],
+  ['🗓  Qué hay hoy', '↩️  Deshacer'],
+]
+
+const TECLADO_FIJO = (() => {
+  const k = new Keyboard()
+  for (const fila of BOTONES_FIJOS) {
+    for (const b of fila) k.text(b)
+    k.row()
+  }
+  return k.resized().persistent()
+})()
+
+/**
+ * El menú nativo del «/» de Telegram.
+ *
+ * Es la otra mitad: la lista con descripción que sale al tocar el icono de
+ * comandos. Sin esto, saber qué se le puede pedir exige haber leído la
+ * ayuda alguna vez.
+ */
+const COMANDOS = [
+  { command: 'anotar', description: 'Apuntar algo que tienes que hacer' },
+  { command: 'clase', description: 'Enseñarle un compromiso fijo' },
+  { command: 'hoy', description: 'Lo que ha hecho hoy por su cuenta' },
+  { command: 'huecos', description: 'Dónde te cabe lo que tienes pendiente' },
+  { command: 'deshacer', description: 'Devolver lo último como estaba' },
+  { command: 'enlace', description: 'La dirección para conectar la app' },
+  { command: 'diagnostico', description: 'Por qué la app sale vacía' },
+  { command: 'ayuda', description: 'Todo lo que sé hacer' },
+]
+
+/**
+ * Lo que se pregunta al tocar un botón que necesita datos.
+ *
+ * La respuesta llega como *reply* al mensaje de la pregunta, así que el
+ * propio mensaje lleva el contexto: no hace falta guardar en qué punto va
+ * la conversación, y por lo tanto no hay estado que se pierda al
+ * reiniciar ni que se cruce entre dos cosas a medias. Telegram guarda el
+ * hilo por nosotros.
+ */
+const PREGUNTAS: Array<{ boton: string; marca: string; pregunta: string; comando: string }> = [
+  {
+    boton: '📝  Anotar algo',
+    marca: '¿Qué tienes que hacer?',
+    pregunta: '¿Qué tienes que hacer?\n\nEscríbelo y ya. Si quieres decir cuánto '
+      + 'te toma, ponlo detrás de un punto:\n\nestudiar cálculo · 2h',
+    comando: '/anotar',
+  },
+  {
+    boton: '📅  Enseñarle una clase',
+    marca: '¿Qué clase o compromiso?',
+    pregunta: '¿Qué clase o compromiso?\n\nEscríbelo en este orden — días, desde, '
+      + 'hasta, nombre:\n\nmartes,jueves 10:00 12:00 Laboratorio',
+    comando: '/clase',
+  },
+]
+
+/** Los que no piden nada: el botón ya es la orden entera. */
+const ATAJOS: Record<string, string> = {
+  '🗓  Qué hay hoy': '/hoy',
+  '↩️  Deshacer': '/deshacer',
+}
+
+/**
+ * Convertir el toque de un botón en la orden que toca.
+ *
+ * Vive aquí y no en el servicio porque los botones de abajo son una cosa de
+ * Telegram: por la app se ven formularios, y el servicio no tiene por qué
+ * enterarse de ninguna de las dos. Es pura para poder probarla: si esto se
+ * desalinea de los textos de los botones, el botón deja de hacer nada al
+ * tocarlo y no hay error en ningún log.
+ */
+export function traducirToque(texto: string, respondeA?: string): string {
+  const limpio = texto.trim()
+
+  const atajo = ATAJOS[limpio]
+  if (atajo) return atajo
+
+  // Una respuesta a una de nuestras preguntas: el mensaje al que contesta
+  // dice qué se le había pedido. Así el contexto lo guarda Telegram y no
+  // hay estado que se pierda al reiniciar ni que se cruce entre dos cosas
+  // a medias.
+  if (respondeA) {
+    const p = PREGUNTAS.find((q) => respondeA.startsWith(q.marca))
+    if (p) return `${p.comando} ${limpio}`
+  }
+
+  return limpio
+}
+
+/** ¿Este texto es un botón (o un comando pelado) que necesita preguntar antes? */
+export function preguntaPara(texto: string) {
+  const limpio = texto.trim()
+  return PREGUNTAS.find((q) =>
+    q.boton === limpio || limpio.replace(/@.*$/, '').toLowerCase() === q.comando)
+}
+
+/** Para las pruebas: que los botones dibujados y los atendidos sean los mismos. */
+export const BOTONES_DE_ABAJO = BOTONES_FIJOS.flat()
+export const COMANDOS_DEL_MENU = COMANDOS
 
 /** Lo que cabe en `callback_data`, por protocolo. */
 const TOPE_DATO = 64
@@ -95,7 +209,8 @@ export function crearCanalTelegram(d: DepsTelegram) {
   }
 
   const responder = (ctx: Context, m: Mensaje) =>
-    ctx.reply(m.texto, { reply_markup: aTeclado(m.botones) })
+    ctx.reply(m.texto, { reply_markup: aTeclado(m.botones) ?? TECLADO_FIJO })
+
 
   /** Un fallo atendiendo no puede dejarlo esperando una respuesta que no llega. */
   function seguro<C extends Context>(fn: (ctx: C) => Promise<void>) {
@@ -143,8 +258,26 @@ export function crearCanalTelegram(d: DepsTelegram) {
     }))
 
     bot.on('message:text', seguro(async (ctx) => {
+      const crudo = ctx.msg.text.trim()
+
+      // Un botón que pide datos: se pregunta y se espera la respuesta. El
+      // `force_reply` es lo que hace que el teléfono cite este mensaje al
+      // contestar, y así lo que él escriba llega ya con su contexto.
+      //
+      // El comando pelado del menú «/» entra por aquí también: quien lo
+      // elige de una lista no vio la sintaxis, y contestarle con la ayuda
+      // sería mandarlo a escribirlo todo otra vez.
+      const pide = preguntaPara(crudo)
+      if (pide) {
+        await ctx.reply(pide.pregunta, {
+          reply_markup: { force_reply: true, input_field_placeholder: 'Escríbelo aquí' },
+        })
+        return
+      }
+
       await ctx.replyWithChatAction('typing').catch(() => {})
-      for (const m of await conversacion.atenderTexto(ctx.msg.text)) await responder(ctx, m)
+      const orden = traducirToque(crudo, ctx.msg.reply_to_message?.text)
+      for (const m of await conversacion.atenderTexto(orden)) await responder(ctx, m)
     }))
 
     bot.on('callback_query:data', seguro(async (ctx) => {
@@ -191,6 +324,11 @@ export function crearCanalTelegram(d: DepsTelegram) {
      * así que atenderla tarde no puede borrar nada a sus espaldas.
      */
     arrancar(): void {
+      // El menú del «/». Que falle no puede impedir que el bot arranque:
+      // es comodidad, no funcionamiento.
+      void bot.api.setMyCommands(COMANDOS)
+        .catch((e) => d.registro?.warn({ err: e }, 'no se pudo poner el menú de comandos'))
+
       void bot.start({
         onStart: (yo) => d.registro?.info(
           { bot: yo.username, emparejado: Boolean(chatId) },

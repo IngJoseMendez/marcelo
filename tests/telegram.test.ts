@@ -1,7 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { Bot } from 'grammy'
-import { NotificadorTelegram, aTeclado } from '../src/adaptadores/telegram.ts'
+import {
+  BOTONES_DE_ABAJO, COMANDOS_DEL_MENU, NotificadorTelegram, aTeclado,
+  preguntaPara, traducirToque,
+} from '../src/adaptadores/telegram.ts'
 
 /**
  * El adaptador de verdad, sin red.
@@ -103,4 +106,82 @@ test('sin chat configurado no manda nada, pero tampoco revienta', async () => {
 
   assert.deepEqual(enviados, [])
   assert.match(avisos[0]!, /TELEGRAM_CHAT_ID/)
+})
+
+// ── los botones de abajo ───────────────────────────────────────
+//
+// «Escribe /anotar» no es una interfaz: un comando que hay que recordar y
+// teclear bien no existe para quien no lo sabe. Estos botones salen solos
+// al abrir el chat, y por eso son el camino real para meter cosas a mano.
+//
+// Se prueban porque el fallo es silencioso: si el texto de un botón deja
+// de coincidir con lo que se atiende, el botón simplemente no hace nada al
+// tocarlo, y en ningún log aparece nada.
+
+test('los botones que no piden datos disparan su comando', () => {
+  assert.equal(traducirToque('🗓  Qué hay hoy'), '/hoy')
+  assert.equal(traducirToque('↩️  Deshacer'), '/deshacer')
+})
+
+test('todo botón dibujado hace algo al tocarlo', () => {
+  for (const boton of BOTONES_DE_ABAJO) {
+    const hace = preguntaPara(boton) !== undefined || traducirToque(boton).startsWith('/')
+    assert.ok(hace, `el botón «${boton}» no está atendido por nadie`)
+  }
+})
+
+test('los que sí piden datos preguntan antes, en vez de fallar', () => {
+  const p = preguntaPara('📝  Anotar algo')
+  assert.ok(p)
+  assert.equal(p.comando, '/anotar')
+  // La pregunta empieza por la marca: es lo que la reconoce al contestarla.
+  assert.ok(p.pregunta.startsWith(p.marca))
+})
+
+test('el comando pelado del menú «/» pregunta igual que el botón', () => {
+  // Quien lo elige de una lista no vio la sintaxis: contestarle con la
+  // ayuda sería mandarlo a escribirlo todo otra vez.
+  assert.equal(preguntaPara('/anotar')?.comando, '/anotar')
+  assert.equal(preguntaPara('/clase')?.comando, '/clase')
+  assert.equal(preguntaPara('/anotar@MiBot')?.comando, '/anotar')
+})
+
+test('un comando con datos NO pregunta: ya los trae', () => {
+  assert.equal(preguntaPara('/anotar comprar pan'), undefined)
+})
+
+/**
+ * El contexto lo guarda Telegram, no nosotros: la respuesta llega citando
+ * la pregunta, y la pregunta dice qué se había pedido. Sin estado propio no
+ * hay nada que se pierda al reiniciar ni que se cruce entre dos cosas a
+ * medias.
+ */
+test('contestar a la pregunta arma el comando entero', () => {
+  assert.equal(
+    traducirToque('estudiar cálculo · 2h', '¿Qué tienes que hacer?\n\nEscríbelo y ya…'),
+    '/anotar estudiar cálculo · 2h')
+  assert.equal(
+    traducirToque('martes,jueves 10:00 12:00 Laboratorio', '¿Qué clase o compromiso?\n\n…'),
+    '/clase martes,jueves 10:00 12:00 Laboratorio')
+})
+
+test('contestar a cualquier otro mensaje sigue siendo hablarle normal', () => {
+  assert.equal(
+    traducirToque('cancélame el gimnasio', 'Listo, cancelé «Gimnasio».'),
+    'cancélame el gimnasio')
+})
+
+test('escribir normal no se toca', () => {
+  assert.equal(traducirToque('  qué tengo mañana  '), 'qué tengo mañana')
+})
+
+test('el menú del «/» no ofrece comandos que no existen', () => {
+  // Un menú que ofrece algo que contesta «no conozco eso» es peor que no
+  // tener menú: lo eligió de una lista que le dimos nosotros.
+  const conocidos = ['anotar', 'clase', 'hoy', 'huecos', 'deshacer', 'enlace',
+    'diagnostico', 'ayuda', 'mano', 'start', 'revisar', 'manual', 'pacto']
+  for (const c of COMANDOS_DEL_MENU) {
+    assert.ok(conocidos.includes(c.command), `«/${c.command}» no lo atiende nadie`)
+    assert.ok(c.description.length > 0 && c.description.length <= 60, c.command)
+  }
 })
