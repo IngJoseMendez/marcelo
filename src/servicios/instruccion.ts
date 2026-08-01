@@ -487,6 +487,21 @@ export function crearServicioInstruccion(d: DepsInstruccion) {
       const interpretacion = await d.interprete.interpretar(
         texto, iso(d.reloj.ahora()))
 
+      // «Hola», «gracias», o un audio donde no le pide nada: el modelo
+      // acierta al no sacar ninguna orden. Se contesta como contestaría
+      // cualquiera, en vez de reventar por un saludo.
+      if (interpretacion.ordenes.length === 0) {
+        const respuesta = 'Te leí, pero no vi nada que hacer. '
+          + 'Dime algo como «cancela el gimnasio de mañana» o «qué tengo el jueves».'
+        return {
+          texto: respuesta,
+          resultados: [{
+            herramienta: 'nada', estado: 'nada',
+            entendido: texto.slice(0, 80), respuesta,
+          }],
+        }
+      }
+
       const resultados: ResultadoOrden[] = []
       // De una nota pueden salir tres cosas: se ejecuta la clara y se
       // repregunta sólo por las vagas, en vez de descartar el audio entero.

@@ -1,4 +1,4 @@
-import type { CorreoCrudo } from '../dominio/tipos.ts'
+import { CorreoInalcanzable, type CorreoCrudo } from '../dominio/tipos.ts'
 
 const GRAPH = 'https://graph.microsoft.com/v1.0'
 
@@ -120,10 +120,18 @@ export class FuenteOutlook {
   }
 
   async mensajeCompleto(messageId: string): Promise<CorreoCrudo> {
+    // Borrado, o de una cuenta que ya no es ésta: no lo arregla insistir.
     const m = await this.pedir<MensajeGraph>(
       `/me/messages/${messageId}` +
       '?$select=id,conversationId,subject,receivedDateTime,from,body,' +
       'parentFolderId,inferenceClassification')
+      .catch((e: unknown) => {
+        const codigo = (e as { code?: number }).code
+        if (codigo === 404 || codigo === 410) {
+          throw new CorreoInalcanzable(messageId, 'outlook')
+        }
+        throw e
+      })
 
     const contenido = m.body?.content ?? m.bodyPreview ?? ''
     const cuerpo = m.body?.contentType?.toLowerCase() === 'html'

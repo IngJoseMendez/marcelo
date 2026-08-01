@@ -16,6 +16,7 @@ import { CalendarioGoogle } from './adaptadores/google-calendar.ts'
 import { CalendarioSombra } from './adaptadores/calendario-sombra.ts'
 import { ProveedorGroq } from './adaptadores/groq.ts'
 import { ErrorLLM } from './puertos/proveedor-llm.ts'
+import { CorreoInalcanzable } from './dominio/tipos.ts'
 import { TranscriptorGroq } from './adaptadores/groq-whisper.ts'
 import { crearRepoCompromisos } from './repos/compromisos.ts'
 import { crearRepoCorreos, crearRepoCuentas } from './repos/correos.ts'
@@ -249,6 +250,18 @@ export async function arrancarAsistente(config: Config): Promise<void> {
           log.warn({ messageId: item.messageId, esperar: e.esperar },
             'sin cuota en el proveedor: dejo la tanda para el próximo minuto')
           return
+        }
+
+        // Un correo que ya no está no se arregla insistiendo: da el mismo
+        // 404 las tres veces. Se anota en una línea y se cierra, en vez de
+        // tres trazas de Google por cada uno. Con 22 encolados de una
+        // cuenta vieja, eso era una pantalla de rojo que no significaba
+        // nada y tapaba los errores de verdad.
+        if (e instanceof CorreoInalcanzable) {
+          log.info({ messageId: item.messageId, proveedor: cuenta.proveedor },
+            'ese correo ya no está en el buzón: lo doy por cerrado')
+          await cola.marcarError(item.id, e.message, true)
+          continue
         }
 
         log.error({ err: e, messageId: item.messageId }, 'fallo procesando')

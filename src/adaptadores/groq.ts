@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { ZodError } from 'zod'
 import { ErrorLLM, type CausaLLM, type PeticionJson, type ProveedorLLM } from '../puertos/proveedor-llm.ts'
 
 const REINTENTOS_POR_DEFECTO = 3
@@ -37,6 +38,13 @@ function esperaPedida(e: unknown): number | undefined {
 }
 
 function causaDe(e: unknown): CausaLLM {
+  // Primero lo nuestro. Un fallo de esquema o de JSON ocurre DESPUÉS de que
+  // el proveedor contestó perfectamente, así que llamarlo «no se pudo
+  // llegar al proveedor» —que es lo que pasaba, porque un ZodError no trae
+  // código HTTP y caía en el `undefined`— mandaba a mirar la red, la clave
+  // y la cuota mientras el problema estaba en la forma de la respuesta.
+  if (e instanceof ZodError || e instanceof SyntaxError) return 'formato'
+
   const codigo = codigoDe(e)
   if (codigo === 429) return 'cuota'
   if (codigo === 404) return 'modelo'
@@ -119,5 +127,13 @@ function explicar(
       + 'Se reintenta más tarde: no se pierde nada.'
   }
   if (causa === 'red') return `No se pudo llegar al proveedor: ${String(fallo)}`
+  // Se nombra el campo que falló: «no produjo JSON válido» delante de un
+  // JSON impecable al que sólo le sobra un decimal no ayuda a nadie.
+  if (fallo instanceof ZodError) {
+    const donde = fallo.issues
+      .map((i) => `${i.path.join('.') || 'la raíz'} (${i.message})`)
+      .join('; ')
+    return `«${modelo}» contestó, pero su respuesta no encaja en ${intentos} intentos: ${donde}`
+  }
   return `El modelo no produjo JSON válido en ${intentos} intentos: ${String(fallo)}`
 }

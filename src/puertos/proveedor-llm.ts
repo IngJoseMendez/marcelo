@@ -4,7 +4,14 @@ export interface PeticionJson<T> {
   modelo: string
   sistema: string
   usuario: string
-  esquema: z.ZodType<T>
+  /**
+   * Lo que entra es `unknown` a propósito: del modelo llega JSON arbitrario
+   * y el esquema está justamente para eso. Con el `z.ZodType<T>` de antes
+   * —que da por hecho que lo aceptado y lo producido son lo mismo— un
+   * esquema que traduce al validar hacía que `T` se atara a lo aceptado, y
+   * el tipo de lo aceptado se derramaba por todo el dominio.
+   */
+  esquema: z.ZodType<T, z.ZodTypeDef, unknown>
   reintentos?: number
 }
 

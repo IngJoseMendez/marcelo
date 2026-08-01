@@ -62,6 +62,22 @@ test('tras tres fallos queda muerto y deja de reintentarse', async () => {
   assert.equal((await cola.muertos()).length, 1)
 })
 
+/**
+ * Un correo borrado —o de una cuenta que ya no es ésta— da 404 hoy, mañana
+ * y siempre. En la máquina de Marcelo eran veintidós encolados así: tres
+ * intentos cada uno, sesenta y seis llamadas a Google para nada y una
+ * pantalla de rojo que tapaba los errores de verdad.
+ */
+test('lo que no existe muere a la primera, sin gastar tres intentos', async () => {
+  const cola = crearRepoCola(db)
+  await cola.encolar(cuenta, 'm1')
+  const [item] = await cola.tomarPendientes(10)
+  await cola.marcarError(item!.id, 'El correo m1 ya no está en gmail', true)
+
+  assert.equal((await cola.tomarPendientes(10)).length, 0, 'no se vuelve a intentar')
+  assert.equal((await cola.muertos()).length, 1, 'y queda anotado, no desaparece')
+})
+
 test('marcarListo lo saca de la cola para siempre', async () => {
   const cola = crearRepoCola(db)
   await cola.encolar(cuenta, 'm1')

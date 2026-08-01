@@ -1,6 +1,17 @@
 import { google } from 'googleapis'
 import type { OAuth2Client } from 'google-auth-library'
-import type { CorreoCrudo } from '../dominio/tipos.ts'
+import { CorreoInalcanzable, type CorreoCrudo } from '../dominio/tipos.ts'
+
+/**
+ * Gmail contesta 404 a un mensaje que se borró, y también a uno que existe
+ * pero en OTRA cuenta — que es lo que pasa cuando la cola trae ids de
+ * antes de reconectar con otra dirección. En los dos casos es definitivo.
+ */
+function seFue(e: unknown): boolean {
+  const codigo = (e as { status?: number; code?: number })?.status
+    ?? (e as { code?: number })?.code
+  return codigo === 404 || codigo === 410
+}
 
 /** Recorre el árbol MIME buscando texto legible. */
 function extraerCuerpo(payload: unknown): string {
@@ -65,6 +76,9 @@ export class FuenteGmail {
   async mensajeCompleto(messageId: string): Promise<CorreoCrudo> {
     const r = await this.gmail.users.messages.get({
       userId: 'me', id: messageId, format: 'full',
+    }).catch((e: unknown) => {
+      if (seFue(e)) throw new CorreoInalcanzable(messageId, 'gmail')
+      throw e
     })
     const cabeceras = r.data.payload?.headers ?? []
     const buscar = (n: string) =>

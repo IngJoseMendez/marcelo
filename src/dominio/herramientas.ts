@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { EsquemaReferente } from './esquemas.ts'
+import { EsquemaConfianza, EsquemaReferente } from './esquemas.ts'
 
 /**
  * Las herramientas acotadas del intérprete.
@@ -18,7 +18,8 @@ import { EsquemaReferente } from './esquemas.ts'
  */
 
 const HHMM = z.string().regex(/^\d{2}:\d{2}$/)
-const Confianza = z.enum(['alta', 'media', 'baja'])
+// Aguanta que el modelo diga 0.9 en vez de "alta": ver EsquemaConfianza.
+const Confianza = EsquemaConfianza
 
 export const EsquemaOrden = z.discriminatedUnion('herramienta', [
   z.object({
@@ -98,9 +99,16 @@ export const EsquemaOrden = z.discriminatedUnion('herramienta', [
  * Una nota de voz puede traer tres cosas. El esquema las admite por
  * separado para poder ejecutar la clara y repreguntar sólo por las vagas,
  * en vez de descartar el audio entero.
+ *
+ * La lista puede venir **vacía**, y eso no es un error: es la respuesta
+ * correcta a un «hola» o a un audio donde no se le pide nada. Exigir al
+ * menos una obligaba al modelo a inventarse una orden para cumplir el
+ * esquema —justo lo que no se quiere de un intérprete que puede cancelar
+ * clases— y cuando no se la inventaba, tres reintentos y un error rojo por
+ * un saludo. Lo vacío se contesta con palabras, no con una excepción.
  */
 export const EsquemaInterpretacion = z.object({
-  ordenes: z.array(EsquemaOrden).min(1).max(4),
+  ordenes: z.array(EsquemaOrden).max(4),
 })
 
 export type Orden = z.infer<typeof EsquemaOrden>

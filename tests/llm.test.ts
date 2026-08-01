@@ -270,3 +270,33 @@ test('un JSON mal formado sí se reintenta: eso suele arreglarse solo', async ()
   assert.deepEqual(r, { a: 'ok' })
   assert.equal(llamadas, 3)
 })
+
+/**
+ * En la máquina de Marcelo esto decía «No se pudo llegar al proveedor» con
+ * el proveedor contestando perfectamente: el fallo era del esquema, y un
+ * ZodError no trae código HTTP, así que caía en el saco de «red». Mandó a
+ * mirar la conexión, la clave y la cuota durante un buen rato mientras el
+ * problema estaba en la forma de la respuesta.
+ */
+test('si el fallo es del esquema, no se dice que fue la red', async () => {
+  const cliente = {
+    chat: { completions: { create: async () => ({
+      choices: [{ message: { content: '{"clasificacion":"ruido","confianza":0.9}' } }],
+    }) } },
+  }
+  const llm = new ProveedorGroq('k', 'https://x.test/v1')
+  ;(llm as unknown as { cliente: unknown }).cliente = cliente
+
+  await assert.rejects(() => llm.completarJson({
+    modelo: 'llama-3.1-8b', sistema: 's', usuario: 'u', reintentos: 1,
+    esquema: z.object({ clasificacion: z.string(), confianza: z.enum(['alta']) }),
+  }), (e: ErrorLLM) => {
+    assert.equal(e.causa, 'formato', 'el proveedor contestó: la red no tuvo la culpa')
+    assert.doesNotMatch(e.message, /no se pudo llegar/i)
+    // Y nombra el campo: «no produjo JSON válido» delante de un JSON
+    // impecable al que sólo le sobra un decimal no ayuda a nadie.
+    assert.match(e.message, /confianza/)
+    assert.match(e.message, /llama-3\.1-8b/)
+    return true
+  })
+})

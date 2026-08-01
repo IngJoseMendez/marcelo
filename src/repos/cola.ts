@@ -51,15 +51,23 @@ export function crearRepoCola(db: BaseDatos) {
       await db.query(`UPDATE cola SET estado = 'listo' WHERE id = $1`, [id])
     },
 
-    /** Tras MAX_INTENTOS el item queda muerto y deja de reintentarse. */
-    async marcarError(id: number, error: string): Promise<void> {
+    /**
+     * Tras MAX_INTENTOS el item queda muerto y deja de reintentarse.
+     *
+     * Con `definitivo`, muere a la primera. Hay fallos que no son «ahora
+     * no» sino «esto no existe» —un correo borrado, o de una cuenta que ya
+     * no es ésta— y contra ésos reintentar es gastar llamadas para obtener
+     * exactamente el mismo error, tres veces, llenando el log de rojo.
+     */
+    async marcarError(id: number, error: string, definitivo = false): Promise<void> {
       await db.query(
         `UPDATE cola
             SET intentos = intentos + 1,
                 ultimo_error = $2,
-                estado = CASE WHEN intentos + 1 >= $3 THEN 'muerto' ELSE 'pendiente' END
+                estado = CASE WHEN $4 OR intentos + 1 >= $3
+                              THEN 'muerto' ELSE 'pendiente' END
           WHERE id = $1`,
-        [id, error.slice(0, 2000), MAX_INTENTOS])
+        [id, error.slice(0, 2000), MAX_INTENTOS, definitivo])
     },
 
     async muertos(): Promise<ItemCola[]> {
