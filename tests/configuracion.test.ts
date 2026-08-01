@@ -7,6 +7,7 @@ import { canjearCodigo, cuentaDelIdToken, urlDeConsentimiento } from '../src/con
 import { urlEnSalida } from '../src/configuracion/tunel.ts'
 import { crearEnlacePublico } from '../src/configuracion/enlace.ts'
 import { publicarVariables, redesplegar, variablesDeLaApp } from '../src/configuracion/vercel.ts'
+import { proveedorPorId, urlDe } from '../src/configuracion/proveedores.ts'
 import { esperarChat, probarBase, probarProveedor, probarTelegram } from '../src/configuracion/verificaciones.ts'
 
 /** Un `fetch` de mentira: guarda lo que le piden y devuelve lo guionado. */
@@ -606,4 +607,44 @@ test('si ni el catálogo ni el chat contestan, ahí sí la dirección está mal'
   })
 
   assert.match(r.mensaje, /Revisa la dirección/)
+})
+
+test('se prueba el proveedor ELEGIDO, con sus modelos y su nombre', async () => {
+  // El desplegable no se estaba enviando y el servidor caía a Groq: probaba
+  // los llama de Groq contra la dirección de Cloudflare, y el mensaje de
+  // error nombraba a un proveedor que el usuario nunca eligió.
+  const cloudflare = proveedorPorId('cloudflare')!
+  const { buscar, llamadas } = buscarFalso([
+    { estado: 405, cuerpo: {} },
+    { cuerpo: { choices: [{ message: { content: 'ok' } }] } },
+  ])
+
+  const r = await probarProveedor('token', urlDe('cloudflare', ''), {
+    nombre: cloudflare.nombre, preferidos: cloudflare.preferidos, buscar,
+  })
+
+  assert.equal(r.ok, true)
+  assert.match(r.mensaje, /@cf\//, 'los modelos son los de Cloudflare, no los de Groq')
+
+  const pedido = JSON.parse(String(llamadas[1]!.init!.body)) as { model: string }
+  assert.match(pedido.model, /^@cf\//)
+  assert.match(llamadas[1]!.url, /api\.cloudflare\.com/)
+})
+
+test('cada proveedor con modelos apuntados los tiene coherentes con su casa', () => {
+  // Un catálogo con los modelos de otro proveedor es justo el fallo que
+  // acaba de pasar, pero cometido en los datos en vez de en la página.
+  const casas: Record<string, RegExp> = {
+    cloudflare: /^@cf\//,
+    groq: /llama|whisper/,
+    openai: /^(gpt|whisper)/,
+  }
+  for (const [id, patron] of Object.entries(casas)) {
+    const p = proveedorPorId(id)!
+    for (const lista of Object.values(p.preferidos ?? {})) {
+      for (const modelo of lista) {
+        assert.match(modelo, patron, `${id} tiene apuntado «${modelo}»`)
+      }
+    }
+  }
 })

@@ -330,9 +330,15 @@ async function refrescar() {
   pintar(await r.json());
 }
 
+// Recoge los select además de los input. Sin eso, elegir proveedor en el
+// desplegable no llegaba al servidor y se caía al de por defecto: el
+// síntoma era «Groq respondió 400» a alguien que acababa de elegir
+// Cloudflare, porque usaba la dirección de uno y los modelos del otro.
 function valores(caja) {
   var datos = {};
-  $$('input[name]', caja).forEach(function (i) { datos[i.name] = i.value.trim(); });
+  $$('input[name], select[name]', caja).forEach(function (i) {
+    datos[i.name] = i.value.trim();
+  });
   return datos;
 }
 

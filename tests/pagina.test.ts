@@ -71,3 +71,21 @@ test('el HTML no queda con etiquetas de plantilla sin resolver', () => {
   // página se ve como texto crudo en medio de la guía.
   assert.ok(!PAGINA.includes('${'), 'quedó una interpolación sin resolver')
 })
+
+test('el guión recoge TODOS los campos con nombre, no sólo los <input>', () => {
+  // Un `<select name=…>` que no se recoge no da error: manda el valor por
+  // defecto y el fallo aparece lejísimos —«Groq respondió 400» a alguien
+  // que acababa de elegir Cloudflare—. Esta prueba fija que el selector
+  // cubra todo lo que la página pinta con nombre.
+  const etiquetas = [...PAGINA.matchAll(/<(input|select|textarea)\b[^>]*\bname="/g)]
+    .map((m) => m[1]!)
+  const usadas = [...new Set(etiquetas)]
+
+  assert.ok(usadas.includes('select'), 'la página tiene un select con nombre')
+
+  const selector = /\$\$\('([^']*)', caja\)/.exec(guion())?.[1] ?? ''
+  for (const etiqueta of usadas) {
+    assert.ok(selector.includes(etiqueta),
+      `hay <${etiqueta} name=…> en la página y «${selector}» no lo recoge`)
+  }
+})
