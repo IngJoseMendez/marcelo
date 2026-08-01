@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useApp } from './contexto'
 import { cronicaEnPalabras, deQuien } from '@/lib/textos'
 import { hora12, relativa } from '@/lib/tiempo'
-import type { EntradaCronica } from '@/lib/tipos'
+import type { EntradaCronica, Graduacion as GraduacionTipo } from '@/lib/tipos'
 
 function agruparPorDia(entradas: EntradaCronica[]): Array<[string, EntradaCronica[]]> {
   const dias = new Map<string, EntradaCronica[]>()
@@ -44,6 +44,27 @@ function Entrada({ entrada, hoy }: { entrada: EntradaCronica; hoy: string }) {
     } finally {
       setDeshaciendo(false)
     }
+  }
+
+  const [veredicto, setVeredicto] = useState(entrada.veredicto)
+
+  /**
+   * El ✓ y el ✗ que alimentan el criterio de graduación.
+   *
+   * Sólo sobre lo que ella hizo sola: juzgar una orden que él mismo dictó
+   * no mide la autonomía de nadie, y falsearía hacia arriba el número que
+   * decide si puede tocar el calendario de verdad.
+   */
+  async function juzgar(cual: 'acierto' | 'error') {
+    const antes = veredicto
+    setVeredicto(cual)
+    const r = await fetch(`/api/acciones/${entrada.id}/juzgar`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ veredicto: cual }),
+    }).catch(() => null)
+    if (!r || !r.ok) setVeredicto(antes)
+    else tostar(cual === 'acierto' ? 'Anotado como acierto.' : 'Anotado como error.')
   }
 
   const deshacer = () =>
@@ -131,7 +152,63 @@ function Entrada({ entrada, hoy }: { entrada: EntradaCronica; hoy: string }) {
   )
 }
 
-export function VistaCronica({ entradas, hoy }: { entradas: EntradaCronica[]; hoy: string }) {
+/**
+ * Cuánto le falta para que le suelten la correa.
+ *
+ * El spec pone un número y no una sensación —≥95 % de aciertos durante 5
+ * días seguidos— y hasta ahora ese número no se veía en ningún lado, así
+ * que salir de sombra era una corazonada. Aquí está, con los días que
+ * lleva y los que faltan.
+ */
+function Graduacion({ g }: { g: GraduacionTipo }) {
+  if (!g.modoSombra) return null
+
+  const listo = g.puedeGraduarse
+  return (
+    <div className="tarjeta sombra-panel" data-anim data-listo={listo ? 'true' : undefined}>
+      <div className="sombra-panel__cab">
+        <span className="ojal">modo sombra</span>
+        <span className="sombra-panel__racha">
+          {g.rachaActual} / {g.rachaNecesaria} días
+        </span>
+      </div>
+
+      <div className="racha" aria-hidden="true">
+        {g.dias.slice(-7).map((d) => (
+          <span
+            key={d.fecha} className="racha__dia"
+            data-estado={
+              d.precision === null ? 'vacio' : d.cumple ? 'bien' : 'mal'
+            }
+            title={
+              d.precision === null
+                ? `${d.fecha}: nada juzgado`
+                : `${d.fecha}: ${Math.round(d.precision * 100)} % (${d.aciertos}✓ ${d.errores}✗)`
+            }
+          />
+        ))}
+      </div>
+
+      <p className="sombra-panel__dictamen">{g.dictamen}</p>
+
+      {g.sinJuzgar > 0 && (
+        <p className="sombra-panel__pista">
+          Marca ✓ o ✗ en cada acción de abajo. Lo que no revisas no cuenta ni a
+          favor ni en contra: suponer que estaba bien sería la forma más fácil
+          de que este número mienta.
+        </p>
+      )}
+    </div>
+  )
+}
+
+export function VistaCronica({
+  entradas, hoy, graduacion,
+}: {
+  entradas: EntradaCronica[]
+  hoy: string
+  graduacion?: GraduacionTipo | null
+}) {
   const dias = agruparPorDia(entradas)
 
   return (
@@ -141,6 +218,8 @@ export function VistaCronica({ entradas, hoy }: { entradas: EntradaCronica[]; ho
         <h1 className="titular titular--corto">Lo que hizo sola</h1>
         <p className="subtitular">Cada acción, con el correo que la causó y qué tan segura estaba.</p>
       </div>
+
+      {graduacion && <Graduacion g={graduacion} />}
 
       {dias.length === 0 ? (
         <div className="tarjeta vacio" data-anim>

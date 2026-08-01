@@ -136,6 +136,41 @@ export function crearRepoAcciones(db: BaseDatos) {
         [id])
     },
 
+    /**
+     * El ✓ o el ✗ de Marcelo.
+     *
+     * Sólo sobre lo que ella hizo sola: juzgar una orden que él mismo
+     * dictó no mide la autonomía de nadie, y colarla en el número que
+     * decide si sale de sombra lo falsearía hacia arriba.
+     */
+    async juzgar(
+      id: number, veredicto: 'acierto' | 'error', cuandoIso: string
+    ): Promise<boolean> {
+      const { rows } = await db.query<{ id: string | number }>(
+        `UPDATE acciones SET veredicto = $2, juzgada_en = $3
+          WHERE id = $1 AND origen = 'correo' RETURNING id`,
+        [id, veredicto, cuandoIso])
+      return rows.length > 0
+    },
+
+    /** Lo que ella hizo sola, con su veredicto, para medir la graduación. */
+    async juzgadas(desdeIso: string): Promise<Array<{
+      id: number; creadaEn: string; veredicto: 'acierto' | 'error' | null
+    }>> {
+      const { rows } = await db.query<{
+        id: string | number; creada_en: Date; veredicto: 'acierto' | 'error' | null
+      }>(
+        `SELECT id, creada_en, veredicto FROM acciones
+          WHERE origen = 'correo' AND estado IN ('aplicada', 'sombra', 'deshecha')
+            AND creada_en >= $1
+          ORDER BY creada_en`, [desdeIso])
+      return rows.map((r) => ({
+        id: Number(r.id),
+        creadaEn: r.creada_en.toISOString(),
+        veredicto: r.veredicto,
+      }))
+    },
+
     async enRango(desdeIso: string, hastaIso: string): Promise<AccionGuardada[]> {
       const { rows } = await db.query<Fila>(
         `SELECT ${COLUMNAS} FROM acciones

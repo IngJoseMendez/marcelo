@@ -4,6 +4,8 @@ import { botonDeshacer } from '../dominio/resumen.ts'
 import type { ResultadoOrden, ServicioInstruccion } from './instruccion.ts'
 import type { ResultadoDeshacer, ServicioDeshacer } from './deshacer.ts'
 import type { ServicioResumen } from './resumen.ts'
+import type { ServicioPropuestas } from './propuestas.ts'
+import type { ServicioAgenda } from './agendar.ts'
 
 export interface DepsConversacion {
   instruccion: ServicioInstruccion
@@ -12,6 +14,10 @@ export interface DepsConversacion {
   transcriptor?: Transcriptor
   /** Para «/hoy» y para el botón «Deshacer algo». */
   resumen?: ServicioResumen
+  /** Lo que ella metería en los huecos. Proponer no escribe nada. */
+  propuestas?: ServicioPropuestas
+  /** Aceptar una propuesta pasa por aquí, como cualquier otra escritura. */
+  agenda?: ServicioAgenda
   /** Sólo decide por dónde vuelve la respuesta, nunca qué se hace. */
   canal?: 'telegram' | 'web'
 }
@@ -35,6 +41,7 @@ const AYUDA = [
   '· «de Bancolombia no me avises»',
   '',
   '/hoy — lo que he hecho hoy por mi cuenta',
+  '/huecos — dónde te cabe lo que tienes pendiente',
   '/deshacer — devolver lo último como estaba',
 ].join('\n')
 
@@ -96,6 +103,30 @@ export function crearServicioConversacion(d: DepsConversacion) {
     }
   }
 
+  /**
+   * «Tienes dos horas libres el jueves, ¿meto ahí el estudio del parcial?»
+   *
+   * Proponer no escribe nada: el botón lleva la intención y la hora, y
+   * aceptarlo pasa por el mismo actuador, la misma política y la misma
+   * auditoría que todo lo demás.
+   */
+  async function menuHuecos(): Promise<Mensaje[]> {
+    if (!d.propuestas) return [{ texto: 'Todavía no sé mirar tus huecos.' }]
+
+    const hoy = await d.propuestas.delDia()
+    if (hoy.propuestas.length === 0) {
+      return [{ texto: 'No veo dónde meter nada hoy: o no hay huecos, o no hay nada pendiente que quepa.' }]
+    }
+
+    return hoy.propuestas.map((p) => ({
+      texto: `Tienes libre a las ${p.inicio.slice(11, 16)}. ¿Meto ahí «${p.titulo}»?`
+        + `\n${p.porque}, y son ${p.duracionMin} min.`,
+      botones: [
+        { texto: '📌  Sí, méteme eso', dato: `agendar:${p.intencionId}:${p.inicio}` },
+      ],
+    }))
+  }
+
   async function comando(texto: string): Promise<Mensaje[]> {
     // Telegram manda «/deshacer@MiBot» cuando el bot vive en un grupo.
     const [crudo = '', ...resto] = texto.split(/\s+/)
@@ -110,6 +141,8 @@ export function crearServicioConversacion(d: DepsConversacion) {
           ? await d.deshacer.deshacer(id)
           : await d.deshacer.deshacerUltima())]
     }
+
+    if (nombre === '/huecos') return menuHuecos()
 
     if (nombre === '/hoy') {
       return [d.resumen
@@ -196,6 +229,27 @@ export function crearServicioConversacion(d: DepsConversacion) {
           ? await d.deshacer.deshacer(id)
           : await d.deshacer.deshacerUltima()
         return { aviso: r.ok ? 'Deshecho' : 'No se pudo', mensajes: [respuestaDeshacer(r)] }
+      }
+
+      if (accion === 'agendar') {
+        const [, id, ...resto] = dato.split(':')
+        const inicio = resto.join(':')
+        const intencionId = Number(id)
+        if (!d.agenda || !Number.isInteger(intencionId) || !inicio) {
+          return { aviso: 'Ese botón ya no sirve', mensajes: [] }
+        }
+        // Por el mismo camino de siempre: política, inversa antes de
+        // aplicar, auditoría y deshacer. Sin atajos.
+        const r = await d.agenda.agendar(intencionId, inicio, 'texto')
+        return {
+          aviso: r.ok ? 'Agendado' : 'No se pudo',
+          mensajes: [r.ok
+            ? {
+                texto: `📌  Listo, te lo puse a las ${inicio.slice(11, 16)}.`,
+                botones: r.accionId ? [botonDeshacer(r.accionId)] : undefined,
+              }
+            : { texto: `No pude agendarlo: ${r.motivo ?? 'ya no está disponible'}.` }],
+        }
       }
 
       if (accion === 'deshacer-algo') return { mensajes: [await menuDeshacer()] }

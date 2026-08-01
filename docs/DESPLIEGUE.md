@@ -254,7 +254,7 @@ npm run dev                          # con API_BASE=http://localhost:4000
 
 ## 4. Verificar que quedó bien
 
-- [ ] `npm test` pasa completo (309 pruebas)
+- [ ] `npm test` pasa completo (401 pruebas)
 - [ ] **Abre un respaldo antes de necesitarlo**: `npm run respaldo:abrir -- respaldos/<archivo>`.
       Un respaldo que nadie ha probado a abrir no es un respaldo
 - [ ] `RESPALDO_CLAVE` guardada FUERA de la laptop. Si se muere el disco y

@@ -6,12 +6,16 @@ import type { BaseDatos } from '../db/base-datos.ts'
 import type { Reloj } from '../puertos/reloj.ts'
 import type { RepoCompromisos } from '../repos/compromisos.ts'
 import type { RepoIntenciones } from '../repos/intenciones.ts'
+import type { RepoAcciones } from '../repos/acciones.ts'
 import type { ServicioJornada } from '../servicios/jornada.ts'
 import type { ServicioCronica } from '../servicios/cronica.ts'
 import type { ServicioAgenda } from '../servicios/agendar.ts'
 import type { ServicioDeshacer } from '../servicios/deshacer.ts'
 import type { ServicioInstruccion } from '../servicios/instruccion.ts'
 import type { ServicioTesoro } from '../servicios/tesoro.ts'
+import type { ServicioPropuestas } from '../servicios/propuestas.ts'
+import type { ServicioAcceso } from '../servicios/acceso.ts'
+import { medirGraduacion } from '../dominio/graduacion.ts'
 import type { Transcriptor } from '../puertos/transcriptor.ts'
 import { esDeVoz, firmarVoz } from '../dominio/firma-voz.ts'
 import { DURACIONES, calcularPrioridad, redondearDuracion } from '../dominio/intenciones.ts'
@@ -35,6 +39,11 @@ export interface DepsApi {
   repoCompromisos: RepoCompromisos
   /** El libro contable. Sin él, la pantalla Tesoro lo dice en vez de mentir. */
   tesoro?: ServicioTesoro
+  /** Lo que ella metería en los huecos, si se lo dejaran. */
+  propuestas?: ServicioPropuestas
+  repoAcciones: RepoAcciones
+  /** El código de un solo uso. Sin Telegram, la app cae al código fijo. */
+  acceso?: ServicioAcceso
 }
 
 const Mes = z.object({ mes: z.string().regex(/^\d{4}-\d{2}/).optional() })
@@ -57,6 +66,7 @@ const Agendar = z.object({
 })
 
 const Cerrar = z.object({ estado: z.enum(['hecha', 'descartada']) })
+const Veredicto = z.object({ veredicto: z.enum(['acierto', 'error']) })
 
 const Instruccion = z.object({
   texto: z.string().min(1).max(2000),
@@ -173,6 +183,51 @@ export function registrarApi(app: FastifyInstance, d: DepsApi): void {
     api.get('/pactos', async () => ({
       compromisos: await d.repoCompromisos.listarActivos(),
     }))
+
+    api.post('/acciones/:id/juzgar', async (req, res) => {
+      const { id } = Id.parse(req.params)
+      const { veredicto } = Veredicto.parse(req.body)
+      const ok = await d.repoAcciones.juzgar(id, veredicto, d.reloj.ahora().toISO()!)
+      return ok ? { ok } : res.code(404).send({ error: 'Esa acción no es de las que hizo sola' })
+    })
+
+    // ── entrar a la app: código de un solo uso por Telegram ────
+    //
+    // El código NUNCA vuelve por aquí. Sale por Telegram y por ningún
+    // otro lado; devolverlo convertiría el token de servicio en la llave
+    // entera y haría el segundo factor decorativo.
+    api.post('/acceso/pedir', async (_req, res) => {
+      if (!d.acceso) {
+        return res.code(503).send({ error: 'Sin Telegram no puedo mandarte un código' })
+      }
+      const r = await d.acceso.pedir()
+      return r.enviado ? { enviado: true } : res.code(502).send({ error: r.motivo })
+    })
+
+    api.post('/acceso/verificar', async (req, res) => {
+      if (!d.acceso) {
+        return res.code(503).send({ error: 'Sin Telegram no puedo verificar nada' })
+      }
+      const { codigo } = z.object({ codigo: z.string().min(1).max(12) }).parse(req.body)
+      const r = d.acceso.verificar(codigo)
+      return r.ok ? { ok: true } : res.code(401).send({ error: r.motivo })
+    })
+
+    api.get('/graduacion', async () => {
+      const ahora = d.reloj.ahora()
+      return {
+        modoSombra: d.modoSombra,
+        ...medirGraduacion(
+          await d.repoAcciones.juzgadas(ahora.minus({ days: 14 }).startOf('day').toISO()!),
+          ahora),
+      }
+    })
+
+    api.get('/propuestas', async (req) => {
+      if (!d.propuestas) return { fecha: null, propuestas: [] }
+      const { fecha } = Fecha.parse(req.query)
+      return d.propuestas.delDia(fecha)
+    })
 
     api.get('/tesoro', async (req) => {
       if (!d.tesoro) {

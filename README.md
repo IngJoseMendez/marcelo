@@ -275,7 +275,7 @@ cama.
 
 ```bash
 npm install
-npm test          # 321 pruebas, sin red, en segundos
+npm test          # 401 pruebas, sin red, en segundos
 npm run typecheck
 npm run dev       # con recarga
 

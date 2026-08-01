@@ -25,6 +25,8 @@ import { crearRepoReglas } from './repos/reglas.ts'
 import { crearRepoCuentasPorPagar, crearRepoMovimientos } from './repos/movimientos.ts'
 import { crearExtractorFinanzas } from './pipeline/extractor-finanzas.ts'
 import { crearServicioTesoro } from './servicios/tesoro.ts'
+import { crearServicioPropuestas } from './servicios/propuestas.ts'
+import { crearServicioAcceso } from './servicios/acceso.ts'
 import { crearInterprete } from './pipeline/interprete.ts'
 import { crearServicioJornada } from './servicios/jornada.ts'
 import { crearServicioCronica } from './servicios/cronica.ts'
@@ -249,6 +251,13 @@ export async function arrancarAsistente(config: Config): Promise<void> {
 
   const deshacer = crearServicioDeshacer(repoAcciones, calendario, repoIntenciones)
 
+  // Ver el hueco y ver lo que cabe en el es la misma operacion.
+  const propuestas = crearServicioPropuestas({ reloj, jornada, repoIntenciones })
+  const agenda = crearServicioAgenda({
+    reloj, calendario, repoAcciones, repoIntenciones,
+    calendarId: config.google.calendarId,
+  })
+
   // El canal de instrucciones: el LLM entiende, y de ahí en adelante decide y
   // actúa el mismo código que atiende los correos.
   const instruccion = crearServicioInstruccion({
@@ -270,6 +279,7 @@ export async function arrancarAsistente(config: Config): Promise<void> {
   // cambia es por dónde vuelve la respuesta.
   canal?.conectar(crearServicioConversacion({
     instruccion, deshacer, transcriptor, resumen: resumen ?? undefined,
+    propuestas, agenda,
     canal: 'telegram',
   }))
 
@@ -297,7 +307,10 @@ export async function arrancarAsistente(config: Config): Promise<void> {
         .update('firma-de-voz').digest('hex'),
       repoIntenciones,
       repoCompromisos,
+      repoAcciones,
       tesoro,
+      propuestas,
+      acceso: canal ? crearServicioAcceso({ notificador: canal.notificador }) : undefined,
     },
   })
 

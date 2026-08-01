@@ -14,6 +14,8 @@ import { crearServicioInstruccion } from '../src/servicios/instruccion.ts'
 import { crearServicioCronica } from '../src/servicios/cronica.ts'
 import { crearServicioResumen } from '../src/servicios/resumen.ts'
 import { crearServicioConversacion } from '../src/servicios/conversacion.ts'
+import { crearServicioPropuestas } from '../src/servicios/propuestas.ts'
+import { crearServicioAgenda } from '../src/servicios/agendar.ts'
 import { RelojFalso } from '../src/puertos/reloj.ts'
 import { CalendarioFalso } from './fakes/calendario-falso.ts'
 import { CalendarioSombra } from '../src/adaptadores/calendario-sombra.ts'
@@ -114,6 +116,10 @@ async function armar(respuestas: readonly unknown[], opciones: {
       transcriptor,
       resumen: crearServicioResumen({
         reloj, cronica: crearServicioCronica(db, 'America/Bogota'), notificador,
+      }),
+      propuestas: crearServicioPropuestas({ reloj, jornada, repoIntenciones }),
+      agenda: crearServicioAgenda({
+        reloj, calendario: cal, repoAcciones, repoIntenciones, calendarId: 'primary',
       }),
       canal: 'telegram',
     }),
@@ -350,4 +356,35 @@ test('todo lo que va en un botón cabe en los 64 bytes de Telegram', async () =>
   for (const dato of mensajes.flatMap(datos)) {
     assert.ok(Buffer.byteLength(dato ?? '') <= 64, `«${dato}» no cabe`)
   }
+})
+
+// ── proponer huecos ─────────────────────────────────────────────
+
+test('«/huecos» ofrece dónde cabe lo pendiente, y no agenda nada', async () => {
+  // Proponer no escribe: el botón lleva la intención y la hora, y aceptar
+  // es lo que pasa por la política, la inversa y la auditoría.
+  const { conversacion, repoAcciones } = await armar([])
+
+  const mensajes = await conversacion.atenderTexto('/huecos')
+
+  assert.equal(mensajes.length, 1)
+  assert.match(mensajes[0]!.texto, /No veo dónde meter nada|Tienes libre/)
+  assert.equal((await repoAcciones.enRango(
+    '2026-01-01T00:00:00-05:00', '2027-01-01T00:00:00-05:00')).length, 0,
+    'proponer no toca el calendario')
+})
+
+test('un botón de agendar con datos rotos no hace nada', async () => {
+  const { conversacion } = await armar([])
+
+  for (const dato of ['agendar:abc:x', 'agendar::', 'agendar:1:']) {
+    const r = await conversacion.atenderBoton(dato)
+    assert.equal(r.aviso, 'Ese botón ya no sirve', `con «${dato}»`)
+  }
+})
+
+test('el dato de una propuesta cabe en los 64 bytes de Telegram', () => {
+  // Lleva la hora ISO entera dentro, que es lo que más ocupa.
+  const dato = `agendar:12345:2026-08-07T15:00:00-05:00`
+  assert.ok(Buffer.byteLength(dato) <= 64, `«${dato}» son ${Buffer.byteLength(dato)}`)
 })

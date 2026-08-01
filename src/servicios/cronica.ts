@@ -14,6 +14,8 @@ export interface EntradaCronica {
   deshechaEn: string | null
   /** Lo que entendió, tal como se lo enseñó a él. Sólo en órdenes suyas. */
   resumen: string | null
+  /** El ✓ o el ✗ que le puso Marcelo. Sólo en lo que hizo sola. */
+  veredicto: 'acierto' | 'error' | null
   /** Lo hizo sola, sin que nadie se lo pidiera. */
   porElla: boolean
   /** Modo sombra: lo habría hecho, pero no tocó nada. */
@@ -31,6 +33,7 @@ interface Fila {
   confianza: Confianza
   estado: EntradaCronica['estado']
   resumen: string | null
+  veredicto: 'acierto' | 'error' | null
   creada_en: Date
   deshecha_en: Date | null
   payload_aplicado: unknown
@@ -46,7 +49,7 @@ const comoInversa = (v: Fila['payload_inverso']): Inversa | null =>
   typeof v === 'string' ? (JSON.parse(v) as Inversa) : v
 
 const SELECCION = `SELECT a.id, a.tipo, a.origen, a.confianza, a.estado, a.resumen,
-                a.creada_en, a.deshecha_en, a.payload_aplicado, a.payload_inverso,
+                a.creada_en, a.deshecha_en, a.veredicto, a.payload_aplicado, a.payload_inverso,
                 a.compromiso_id, c.titulo AS compromiso_titulo,
                 co.remitente, co.asunto, co.recibido_en
            FROM acciones a
@@ -81,6 +84,7 @@ export function crearServicioCronica(db: BaseDatos, zona = 'America/Bogota') {
       creadaEn: enZona(f.creada_en)!,
       deshechaEn: enZona(f.deshecha_en),
       resumen: f.resumen,
+      veredicto: f.veredicto,
       porElla: f.origen === 'correo',
       ensayo: f.estado === 'sombra',
       // El título del evento vive en la inversa cuando ella lo canceló;

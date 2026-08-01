@@ -73,6 +73,8 @@ export interface RespuestaInstruccion {
 }
 
 export interface EntradaCronica {
+  /** El ✓ o el ✗ que le puso Marcelo. Sólo en lo que hizo sola. */
+  veredicto: 'acierto' | 'error' | null
   id: number
   tipo: string
   origen: Origen
@@ -174,4 +176,23 @@ export interface Tesoro {
   /** Cobros repetidos: mismo comercio, mismo monto, días distintos. */
   sospechas: Array<{ contraparte: string; monto: number; veces: number }>
   moneda: string
+}
+
+export interface Graduacion {
+  modoSombra: boolean
+  dias: Array<{
+    fecha: string
+    aciertos: number
+    errores: number
+    sinJuzgar: number
+    precision: number | null
+    cumple: boolean
+  }>
+  rachaActual: number
+  rachaNecesaria: number
+  precisionNecesaria: number
+  puedeGraduarse: boolean
+  totalJuzgadas: number
+  sinJuzgar: number
+  dictamen: string
 }
