@@ -33,6 +33,22 @@ export interface DepsConversacion {
   }
   /** Para «/enlace»: la dirección de AHORA, que es la que nadie sabe. */
   enlacePublico?: () => string
+  /**
+   * Recorrer los cuatro saltos que hay entre el teléfono y estos datos.
+   *
+   * Va por Telegram porque es el único canal que sigue vivo justo cuando
+   * la app no funciona. Preguntarle a la app por qué no funciona es la
+   * clase de consejo que sólo sirve cuando no hace falta.
+   */
+  revisarCadena?: () => Promise<{
+    ok: boolean
+    eslabones: Array<{
+      titulo: string
+      estado: 'bien' | 'mal' | 'aviso' | 'sin_datos'
+      detalle: string
+      arreglo?: string
+    }>
+  }>
   /** Sólo decide por dónde vuelve la respuesta, nunca qué se hace. */
   canal?: 'telegram' | 'web'
 }
@@ -74,6 +90,7 @@ const AYUDA = [
   '/anotar comprar café · 30m',
   '/clase martes,jueves 10:00 12:00 Laboratorio',
   '/enlace — la dirección para la app',
+  '/diagnostico — por qué la app sale vacía',
 ].join('\n')
 
 /**
@@ -259,6 +276,24 @@ export function crearServicioConversacion(d: DepsConversacion) {
 
     if (nombre === '/anotar') return anotar(resto.join(' '))
     if (nombre === '/clase' || nombre === '/pacto') return ensenar(resto)
+
+    if (nombre === '/diagnostico' || nombre === '/revisar') {
+      if (!d.revisarCadena) {
+        return [{ texto: 'No sé revisar la conexión con la app desde aquí.' }]
+      }
+      // Tarda: sale a internet dos veces. Decirlo evita que crea que se colgó.
+      const c = await d.revisarCadena()
+      const marca = { bien: '✅', mal: '❌', aviso: '⚠️', sin_datos: '❔' }
+      const lineas = c.eslabones.map((e) =>
+        `${marca[e.estado]} ${e.titulo}\n     ${e.detalle}`
+        + (e.arreglo ? `\n     👉 ${e.arreglo}` : ''))
+      return [{
+        texto: [
+          c.ok ? '✅ La app debería verte bien.' : '❌ Por esto la app sale vacía:',
+          '', ...lineas,
+        ].join('\n'),
+      }]
+    }
 
     if (nombre === '/enlace') {
       // La pregunta que nadie puede contestar desde la app cuando la app no

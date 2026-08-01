@@ -19,6 +19,23 @@ export function baseConfigurada(): boolean {
   return Boolean(process.env.API_BASE && process.env.API_TOKEN)
 }
 
+/**
+ * A dónde está llamando esta app, ahora mismo.
+ *
+ * Se enseña en la pantalla de error a propósito. Sin esto, «no contesta»
+ * es indistinguible de «Vercel guardó las variables pero está sirviendo un
+ * despliegue viejo con la dirección de antes» — que es el caso más común y
+ * el más difícil de ver, porque en el panel de Vercel la variable se ve
+ * correcta. Enseñar la dirección que REALMENTE se usó convierte eso en un
+ * vistazo: si no es la de ahora, falta redesplegar.
+ */
+export function aDondeLlama(): { base: string; hayToken: boolean } {
+  return {
+    base: process.env.API_BASE ?? '',
+    hayToken: Boolean(process.env.API_TOKEN),
+  }
+}
+
 export async function pedir<T>(
   ruta: string,
   init: RequestInit = {},
@@ -27,7 +44,10 @@ export async function pedir<T>(
   const base = process.env.API_BASE
   const token = process.env.API_TOKEN
   if (!base || !token) {
-    return { ok: false, error: 'La app no tiene configurado API_BASE o API_TOKEN' }
+    // Cuál de las dos falta, no «una de las dos»: son dos arreglos
+    // distintos y quien lo lee está delante del panel de Vercel.
+    const falta = !base && !token ? 'API_BASE ni API_TOKEN' : !base ? 'API_BASE' : 'API_TOKEN'
+    return { ok: false, error: `Vercel no tiene ${falta}` }
   }
 
   try {
@@ -59,10 +79,13 @@ export async function pedir<T>(
 
     return { ok: true, datos: (await r.json()) as T }
   } catch (e) {
+    // Con la dirección dentro del mensaje. Es la diferencia entre «no
+    // contesta» —que no dice nada— y ver con los ojos que está llamando a
+    // un túnel de hace tres arranques.
     const causa = e instanceof Error && e.name === 'TimeoutError'
-      ? 'La asistente no contestó a tiempo'
-      : 'No se pudo llegar a la asistente'
-    return { ok: false, error: causa }
+      ? 'no contestó en 8 segundos'
+      : 'no se pudo abrir la conexión'
+    return { ok: false, error: `Llamé a ${base.replace(/\/$/, '')} y ${causa}` }
   }
 }
 

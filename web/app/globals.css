@@ -1217,3 +1217,32 @@ button.rejilla__hueco:active { box-shadow: inset 0 0 0 1.5px var(--linea-2); col
 @media (min-width: 900px) {
   .a-mano__cuerpo form { max-width: 34rem; }
 }
+
+/* ── el diagnóstico de «no alcanzo nada» ────────────────────────
+   Enseña la dirección que la app usó de verdad. Sin esto, «Vercel tiene la
+   variable buena» y «Vercel está sirviendo un despliegue viejo con la
+   variable de ayer» se ven exactamente igual, y el segundo es el común. */
+.diag { margin-top: 14px; }
+.diag__titulo {
+  font-size: 13px; font-weight: 650; letter-spacing: -.01em;
+  color: var(--tinta-2); margin-bottom: 12px;
+}
+.diag__lista { display: flex; flex-direction: column; gap: 10px; }
+.diag__lista > div {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+}
+.diag__lista dt {
+  flex: none; min-width: 5.5rem;
+  font-size: 12.5px; color: var(--tinta-3);
+}
+.diag__lista dd {
+  margin: 0; font-size: 13.5px; color: var(--tinta);
+  /* Una URL larga parte por donde sea antes que desbordar la pantalla. */
+  overflow-wrap: anywhere; word-break: break-all;
+}
+.diag__lista dd em { color: var(--rojo); font-style: normal; }
+.diag__pista {
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid var(--linea);
+  font-size: 12.5px; line-height: 1.5; color: var(--tinta-2);
+}

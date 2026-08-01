@@ -41,6 +41,7 @@ import { crearServicioAMano } from './servicios/a-mano.ts'
 import { redondearDuracion } from './dominio/intenciones.ts'
 import { crearCanalTelegram } from './adaptadores/telegram.ts'
 import { crearEnlacePublico } from './configuracion/enlace.ts'
+import { probarCadena } from './configuracion/cadena.ts'
 import { arrancarConfigurador } from './configuracion/servidor.ts'
 import { crearServicioRespaldo, volcarConComando } from './servicios/respaldo.ts'
 import { escribirEnv } from './configuracion/archivo-env.ts'
@@ -375,6 +376,14 @@ export async function arrancarAsistente(config: Config): Promise<void> {
     // Cuál es la dirección de AHORA: la pregunta que no se puede contestar
     // desde la app justo cuando la app no funciona.
     enlacePublico: () => enlace?.url() ?? config.tunel.url,
+    // Por Telegram y no por la app, a propósito: es el único canal que
+    // sigue en pie justo cuando la app es la que no funciona.
+    revisarCadena: () => probarCadena({
+      puertoLocal: config.puerto,
+      urlPublica: enlace?.url() ?? config.tunel.url,
+      apiToken: config.api.token,
+      vercel: config.vercel,
+    }),
     canal: 'telegram',
   }))
 
