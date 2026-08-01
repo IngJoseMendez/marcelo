@@ -813,8 +813,10 @@ esta clave se fue con él, los respaldos cifrados no sirven de nada.</p>
     <div class="sombra-caja">Para soltarle la correa, cuando lleve dos semanas
     acertando: pon <code class="mono">MODO_SOMBRA=false</code> en el <code class="mono">.env</code>.</div>
     <form method="post" action="/api/reiniciar">
-      <button class="accion" type="submit">Arrancar la asistente</button>
+      <button class="accion" type="submit">Aplicar y arrancar</button>
     </form>
+    <p class="detalle" style="margin-top:10px">Se reinicia sola. Un cambio de
+    configuración sólo entra al reiniciar, así que este botón es lo que lo aplica.</p>
   </div>
 
   <section class="bloque" data-bloque="manual" data-salud="listo">

@@ -32,6 +32,7 @@ import { crearServicioResumen } from './servicios/resumen.ts'
 import { crearServicioConversacion } from './servicios/conversacion.ts'
 import { crearCanalTelegram } from './adaptadores/telegram.ts'
 import { crearEnlacePublico } from './configuracion/enlace.ts'
+import { arrancarConfigurador } from './configuracion/servidor.ts'
 import { crearServicioRespaldo, volcarConComando } from './servicios/respaldo.ts'
 import { escribirEnv } from './configuracion/archivo-env.ts'
 import { crearClasificador } from './pipeline/clasificador.ts'
@@ -356,6 +357,23 @@ export async function arrancarAsistente(config: Config): Promise<void> {
   // Long polling: sale a preguntar en vez de esperar a que le toquen, que es
   // lo único que funciona sin IP pública.
   canal?.arrancar()
+
+  // ── El asistente de configuración, también con ella en marcha ──
+  //
+  // Y en ESTE proceso, no en uno aparte. Es la diferencia entre que el
+  // botón «aplicar y reiniciar» funcione o no: lanzado por su cuenta, ese
+  // botón mataba el configurador y dejaba a la asistente corriendo con la
+  // configuración vieja — guardaba el cambio y no lo aplicaba, que es la
+  // peor mezcla posible.
+  //
+  // Sigue atado a 127.0.0.1, aparte del Fastify que sale por el túnel.
+  try {
+    const guia = await arrancarConfigurador({ registro: log, rutaEnv: config.rutaEnv })
+    log.info({ url: guia.url }, 'asistente de configuración disponible')
+  } catch (e) {
+    // Que no se pueda abrir la guía no puede impedir que ella trabaje.
+    log.warn({ err: e }, 'no se pudo abrir el asistente de configuración')
+  }
 
   // ── El enlace con la app ──────────────────────────────────────
   // Se rehace al arrancar porque el túnel gratuito estrena dirección cada
