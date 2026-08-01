@@ -1,7 +1,50 @@
 import OpenAI from 'openai'
-import { ErrorLLM, type PeticionJson, type ProveedorLLM } from '../puertos/proveedor-llm.ts'
+import { ErrorLLM, type CausaLLM, type PeticionJson, type ProveedorLLM } from '../puertos/proveedor-llm.ts'
 
 const REINTENTOS_POR_DEFECTO = 3
+
+/** Un 429 no se arregla en 300 ms. Los otros fallos casi siempre sí. */
+const ESPERA_FORMATO_MS = 300
+const ESPERA_CUOTA_MS = 4_000
+
+interface FalloHttp {
+  status?: number
+  headers?: Record<string, string> | { get?(n: string): string | null }
+  message?: string
+}
+
+function codigoDe(e: unknown): number | undefined {
+  return (e as FalloHttp | null)?.status
+}
+
+/**
+ * Cuánto pide esperar el proveedor.
+ *
+ * Casi todos mandan `retry-after` en segundos cuando cortan por cuota.
+ * Hacerle caso es la diferencia entre esperar lo justo y adivinar.
+ */
+function esperaPedida(e: unknown): number | undefined {
+  const cabeceras = (e as FalloHttp | null)?.headers
+  if (!cabeceras) return undefined
+
+  const leer = typeof (cabeceras as { get?: unknown }).get === 'function'
+    ? (n: string) => (cabeceras as { get(n: string): string | null }).get(n)
+    : (n: string) => (cabeceras as Record<string, string>)[n]
+
+  const crudo = leer('retry-after') ?? leer('Retry-After')
+  const segundos = Number(crudo)
+  return Number.isFinite(segundos) && segundos > 0 ? segundos * 1000 : undefined
+}
+
+function causaDe(e: unknown): CausaLLM {
+  const codigo = codigoDe(e)
+  if (codigo === 429) return 'cuota'
+  if (codigo === 404) return 'modelo'
+  if (codigo === 401 || codigo === 403) return 'clave'
+  if (codigo !== undefined && codigo >= 500) return 'red'
+  if (codigo === undefined) return 'red'
+  return 'formato'
+}
 
 /**
  * Groq expone una API compatible con OpenAI, así que este mismo adaptador
@@ -22,6 +65,8 @@ export class ProveedorGroq implements ProveedorLLM {
     const intentos = p.reintentos ?? REINTENTOS_POR_DEFECTO
     let ultima = ''
     let ultimoFallo: unknown
+    let causa: CausaLLM = 'formato'
+    let esperar: number | undefined
 
     for (let i = 0; i < intentos; i++) {
       try {
@@ -38,16 +83,41 @@ export class ProveedorGroq implements ProveedorLLM {
         return p.esquema.parse(JSON.parse(ultima))
       } catch (e) {
         ultimoFallo = e
-        // JSON mal formado, campo fuera del esquema o error de red: los tres
-        // suelen resolverse con otra pasada. Espera creciente.
+        causa = causaDe(e)
+        esperar = esperaPedida(e)
+
+        // Un modelo que no existe y una clave que no vale no cambian por
+        // insistir. Reintentarlos tres veces sólo retrasa el aviso y
+        // esconde la causa detrás de «no produjo JSON válido».
+        if (causa === 'modelo' || causa === 'clave') break
+
         if (i < intentos - 1) {
-          await new Promise((r) => setTimeout(r, 300 * 2 ** i))
+          const base = causa === 'cuota' ? ESPERA_CUOTA_MS : ESPERA_FORMATO_MS
+          await new Promise((r) => setTimeout(r, esperar ?? base * 2 ** i))
         }
       }
     }
 
-    throw new ErrorLLM(
-      `El modelo no produjo JSON válido en ${intentos} intentos: ${String(ultimoFallo)}`,
-      ultima)
+    throw new ErrorLLM(explicar(causa, p.modelo, ultimoFallo, intentos), ultima, causa, esperar)
   }
+}
+
+/** El mensaje que va al log tiene que decir qué hacer, no sólo qué pasó. */
+function explicar(
+  causa: CausaLLM, modelo: string, fallo: unknown, intentos: number
+): string {
+  if (causa === 'modelo') {
+    return `El proveedor no conoce el modelo «${modelo}». `
+      + 'Abre el asistente de configuración y dale a Probar en «El cerebro»: '
+      + 'vuelve a elegir del catálogo de hoy.'
+  }
+  if (causa === 'clave') {
+    return 'El proveedor no acepta la clave. Genera otra y ponla en el asistente.'
+  }
+  if (causa === 'cuota') {
+    return `Sin cuota en el proveedor (429) con «${modelo}». `
+      + 'Se reintenta más tarde: no se pierde nada.'
+  }
+  if (causa === 'red') return `No se pudo llegar al proveedor: ${String(fallo)}`
+  return `El modelo no produjo JSON válido en ${intentos} intentos: ${String(fallo)}`
 }

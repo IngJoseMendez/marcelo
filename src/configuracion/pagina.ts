@@ -447,9 +447,27 @@ function pintarProveedor() {
   var p = proveedores.filter(function (x) { return x.id === sel.value; })[0];
   if (!p) return;
   $('#prov-nota').textContent = p.nota;
-  $('#prov-donde').innerHTML = p.donde
-    ? 'La clave se saca en <a class="fuera" href="' + p.donde + '" target="_blank" rel="noreferrer">' + p.donde.replace(/^https?:\\/\\//, '') + '</a>'
-    : '';
+
+  // Los pasos del elegido, y sólo los del elegido: quien va a usar
+  // OpenRouter no tiene por qué leerse los de Google.
+  $('#prov-pasos').innerHTML = (p.pasos || []).length === 0
+    ? ''
+    : '<ol class="pasos">' + p.pasos.map(function (x) {
+        return '<li>' + x + '</li>';
+      }).join('') + '</ol>';
+
+  // Si el elegido no transcribe, el oído deja de ser un detalle escondido
+  // en un desplegable y se abre solo. Enterarse de que no hay voz el día
+  // que se manda la primera nota es enterarse tarde.
+  var oido = $('#oido');
+  if (oido) {
+    oido.open = !p.voz;
+    $('#oido-aviso').innerHTML = p.voz
+      ? '<b>' + p.nombre + ' también oye</b>, así que aquí no tienes que tocar nada.'
+      : '<b>' + p.nombre + ' no transcribe voz.</b> Sin esto, las notas de voz no '
+        + 'sirven. Pon Groq o Cloudflare aquí abajo, sólo para el oído.';
+  }
+
   // La dirección se rellena sola, pero si él ya escribió una, manda la suya.
   var url = $('#LLM_BASE_URL');
   if (!tocados.LLM_BASE_URL) url.value = p.baseUrl;
@@ -614,10 +632,15 @@ y por qué. Corre dentro de Docker, en esta misma laptop — no sale a internet.
 clase del miércoles se canceló. Puedes usar el que quieras — sólo tiene que hablar
 la API de OpenAI, que a estas alturas la habla casi todo el mundo.</p>
 
+<div class="aviso ojo"><b>¿Cuál elijo?</b> Si no tienes preferencia, deja
+<b>Groq</b>: es gratis y además transcribe voz. <b>Si Groq no te deja crear la
+cuenta</b> —pasa— usa <b>OpenRouter</b> para leer y <b>Cloudflare</b> sólo para
+el oído; de Cloudflare vas a necesitar cuenta igual, por el túnel.</div>
+
 <label for="LLM_PROVEEDOR">¿Con cuál?</label>
 <select id="LLM_PROVEEDOR" name="LLM_PROVEEDOR"></select>
 <p class="detalle" id="prov-nota" style="margin-top:8px"></p>
-<p class="detalle" id="prov-donde" style="margin-top:6px"></p>
+<div id="prov-pasos"></div>
 
 <label for="LLM_API_KEY">La clave</label>
 <input type="password" id="LLM_API_KEY" name="LLM_API_KEY" class="mono"
@@ -631,8 +654,9 @@ modelo.</b> Le pregunto al proveedor cuáles tiene <i>hoy</i> y elijo: uno barat
 para clasificar y uno bueno para leer. Si mañana retiran el que usábamos, coge el
 siguiente en vez de quedarse apuntando a un nombre muerto.</div>
 
-<details class="tecnico">
-  <summary>El oído, si tu proveedor no transcribe</summary>
+<details class="tecnico" id="oido">
+  <summary>El oído — para las notas de voz</summary>
+  <p class="detalle" id="oido-aviso" style="margin:10px 0"></p>
   <p class="detalle" style="margin:10px 0">Hay servicios buenísimos leyendo que no
   saben oír. Antes que dejarla muda, déjale el oído en <b>Groq</b>: da Whisper
   grande gratis, y con el acento costeño de Marcelo un modelo pequeño produce

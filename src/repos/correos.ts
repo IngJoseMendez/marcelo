@@ -9,8 +9,17 @@ export function crearRepoCorreos(db: BaseDatos) {
      * La unicidad la garantiza el constraint, no una consulta previa: eso
      * lo hace seguro ante los reintentos concurrentes del webhook, donde dos
      * avisos del mismo mensaje pueden llegar a la vez.
+     *
+     * Devuelve además si YA SE TERMINÓ de procesar, que no es lo mismo que
+     * si la fila existe. La fila se crea antes de llamar al modelo, así que
+     * un fallo pasajero —el proveedor sin cuota, la red— deja una fila
+     * «pendiente». Tratar eso como «ya está hecho» descartaba el correo
+     * para siempre: el peor fallo posible aquí, porque es silencioso y
+     * ningún correo se puede recuperar después.
      */
-    async registrarSiEsNuevo(c: CorreoCrudo): Promise<{ id: number; nuevo: boolean }> {
+    async registrarSiEsNuevo(
+      c: CorreoCrudo
+    ): Promise<{ id: number; nuevo: boolean; terminado: boolean }> {
       const insertado = await db.query<{ id: string | number }>(
         `INSERT INTO correos_procesados
            (cuenta_id, message_id, thread_id, remitente, asunto, recibido_en)
@@ -19,12 +28,19 @@ export function crearRepoCorreos(db: BaseDatos) {
          RETURNING id`,
         [c.cuentaId, c.messageId, c.threadId, c.remitente, c.asunto, c.recibidoEn])
 
-      if (insertado.rows[0]) return { id: Number(insertado.rows[0].id), nuevo: true }
+      if (insertado.rows[0]) {
+        return { id: Number(insertado.rows[0].id), nuevo: true, terminado: false }
+      }
 
-      const existente = await db.query<{ id: string | number }>(
-        'SELECT id FROM correos_procesados WHERE cuenta_id = $1 AND message_id = $2',
+      const existente = await db.query<{ id: string | number; estado: string }>(
+        'SELECT id, estado FROM correos_procesados WHERE cuenta_id = $1 AND message_id = $2',
         [c.cuentaId, c.messageId])
-      return { id: Number(existente.rows[0]!.id), nuevo: false }
+      const fila = existente.rows[0]!
+      return {
+        id: Number(fila.id),
+        nuevo: false,
+        terminado: fila.estado === 'procesado',
+      }
     },
 
     async marcarProcesado(id: number, clasificacion: string): Promise<void> {

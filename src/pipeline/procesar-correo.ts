@@ -51,8 +51,13 @@ export function crearProcesador(d: DepsProcesador) {
       }
 
       // 2. Idempotencia: el mismo correo nunca produce dos acciones.
-      const { id: correoId, nuevo } = await d.repoCorreos.registrarSiEsNuevo(correo)
-      if (!nuevo) return descartar('Ya estaba procesado')
+      //
+      // Se descarta por «ya TERMINADO», no por «ya visto». La fila se crea
+      // antes de llamar al modelo, así que un fallo pasajero deja una
+      // pendiente; tratarla como hecha borraba el correo para siempre, en
+      // silencio y sin forma de recuperarlo.
+      const { id: correoId, terminado } = await d.repoCorreos.registrarSiEsNuevo(correo)
+      if (terminado) return descartar('Ya estaba procesado')
 
       // 3. Clasificar con el modelo barato.
       const { clasificacion } = await d.clasificador.clasificar(correo)

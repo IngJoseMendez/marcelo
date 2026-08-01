@@ -6,6 +6,9 @@ import { crearExtractor } from '../src/pipeline/extractor.ts'
 import { crearDesempate } from '../src/pipeline/desempate.ts'
 import { LlmFalso } from './fakes/llm-falso.ts'
 import type { CorreoCrudo, Compromiso } from '../src/dominio/tipos.ts'
+import { z } from 'zod'
+import { ProveedorGroq } from '../src/adaptadores/groq.ts'
+import type { ErrorLLM } from '../src/puertos/proveedor-llm.ts'
 import type { Candidato } from '../src/dominio/resolutor.ts'
 
 const correo = (over: Partial<CorreoCrudo> = {}): CorreoCrudo => ({
@@ -170,4 +173,100 @@ test('sin candidatos devuelve null sin consultar', async () => {
   const llm = new LlmFalso([])
   assert.equal(await crearDesempate(llm, 'm').elegir([], 'algo'), null)
   assert.equal(llm.peticiones.length, 0)
+})
+
+// ── por qué falló, que no es lo mismo que que falló ─────────────
+
+test('un modelo que no existe no se reintenta tres veces', async () => {
+  // Insistirle a un 404 sólo retrasa el aviso y esconde la causa detrás de
+  // «no produjo JSON válido».
+  let llamadas = 0
+  const cliente = {
+    chat: { completions: { create: async () => {
+      llamadas++
+      throw Object.assign(new Error('404'), { status: 404 })
+    } } },
+  }
+  const llm = new ProveedorGroq('k', 'https://x.test/v1')
+  ;(llm as unknown as { cliente: unknown }).cliente = cliente
+
+  await assert.rejects(
+    () => llm.completarJson({
+      modelo: 'modelo-fantasma', sistema: 's', usuario: 'u',
+      esquema: z.object({ a: z.string() }),
+    }),
+    (e: ErrorLLM) => {
+      assert.equal(e.causa, 'modelo')
+      assert.match(e.message, /modelo-fantasma/, 'el log tiene que decir cuál')
+      assert.match(e.message, /asistente de configuración/, 'y qué hacer')
+      assert.equal(e.pasajero, false)
+      return true
+    })
+
+  assert.equal(llamadas, 1, 'una sola vez')
+})
+
+test('sin cuota se marca como pasajero: eso no se pierde, se reintenta', async () => {
+  const cliente = {
+    chat: { completions: { create: async () => {
+      throw Object.assign(new Error('429'), {
+        status: 429, headers: { 'retry-after': '7' },
+      })
+    } } },
+  }
+  const llm = new ProveedorGroq('k', 'https://x.test/v1')
+  ;(llm as unknown as { cliente: unknown }).cliente = cliente
+
+  await assert.rejects(
+    () => llm.completarJson({
+      modelo: 'm', sistema: 's', usuario: 'u',
+      esquema: z.object({ a: z.string() }), reintentos: 1,
+    }),
+    (e: ErrorLLM) => {
+      assert.equal(e.causa, 'cuota')
+      assert.equal(e.pasajero, true)
+      assert.equal(e.esperar, 7000, 'se le hace caso al retry-after del proveedor')
+      assert.match(e.message, /no se pierde nada/)
+      return true
+    })
+})
+
+test('una clave mala tampoco se reintenta', async () => {
+  let llamadas = 0
+  const cliente = {
+    chat: { completions: { create: async () => {
+      llamadas++
+      throw Object.assign(new Error('401'), { status: 401 })
+    } } },
+  }
+  const llm = new ProveedorGroq('mala', 'https://x.test/v1')
+  ;(llm as unknown as { cliente: unknown }).cliente = cliente
+
+  await assert.rejects(() => llm.completarJson({
+    modelo: 'm', sistema: 's', usuario: 'u', esquema: z.object({ a: z.string() }),
+  }), (e: ErrorLLM) => {
+    assert.equal(e.causa, 'clave')
+    assert.equal(e.pasajero, false)
+    return true
+  })
+  assert.equal(llamadas, 1)
+})
+
+test('un JSON mal formado sí se reintenta: eso suele arreglarse solo', async () => {
+  let llamadas = 0
+  const cliente = {
+    chat: { completions: { create: async () => {
+      llamadas++
+      return { choices: [{ message: { content: llamadas < 3 ? 'no soy json' : '{"a":"ok"}' } }] }
+    } } },
+  }
+  const llm = new ProveedorGroq('k', 'https://x.test/v1')
+  ;(llm as unknown as { cliente: unknown }).cliente = cliente
+
+  const r = await llm.completarJson({
+    modelo: 'm', sistema: 's', usuario: 'u', esquema: z.object({ a: z.string() }),
+  })
+
+  assert.deepEqual(r, { a: 'ok' })
+  assert.equal(llamadas, 3)
 })

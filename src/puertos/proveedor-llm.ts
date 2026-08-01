@@ -16,9 +16,35 @@ export interface ProveedorLLM {
   completarJson<T>(peticion: PeticionJson<T>): Promise<T>
 }
 
+/**
+ * Por qué falló, que no es lo mismo que que falló.
+ *
+ * - `cuota`   el proveedor dice «ahora no» (429). Se resuelve esperando.
+ * - `modelo`  ese identificador no existe ahí (404). No se resuelve nunca.
+ * - `clave`   la credencial no vale (401/403). Tampoco.
+ * - `formato` contestó, pero no con el JSON que se le pidió.
+ * - `red`     no se llegó.
+ *
+ * La distinción no es documental: con `cuota` hay que parar y volver luego,
+ * con `modelo` hay que avisar a alguien, y confundirlas hace que el sistema
+ * se pase la tarde reintentando algo que no va a cambiar.
+ */
+export type CausaLLM = 'cuota' | 'modelo' | 'clave' | 'formato' | 'red'
+
 export class ErrorLLM extends Error {
-  constructor(mensaje: string, readonly ultimaRespuesta?: string) {
+  constructor(
+    mensaje: string,
+    readonly ultimaRespuesta?: string,
+    readonly causa: CausaLLM = 'formato',
+    /** Cuántos milisegundos pidió esperar el proveedor, si lo dijo. */
+    readonly esperar?: number
+  ) {
     super(mensaje)
     this.name = 'ErrorLLM'
+  }
+
+  /** Volver a intentarlo más tarde tiene sentido. */
+  get pasajero(): boolean {
+    return this.causa === 'cuota' || this.causa === 'red'
   }
 }

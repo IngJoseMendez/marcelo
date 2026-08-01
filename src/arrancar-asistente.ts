@@ -15,6 +15,7 @@ import { FuenteOutlook } from './adaptadores/outlook.ts'
 import { CalendarioGoogle } from './adaptadores/google-calendar.ts'
 import { CalendarioSombra } from './adaptadores/calendario-sombra.ts'
 import { ProveedorGroq } from './adaptadores/groq.ts'
+import { ErrorLLM } from './puertos/proveedor-llm.ts'
 import { TranscriptorGroq } from './adaptadores/groq-whisper.ts'
 import { crearRepoCompromisos } from './repos/compromisos.ts'
 import { crearRepoCorreos, crearRepoCuentas } from './repos/correos.ts'
@@ -217,7 +218,28 @@ export async function arrancarAsistente(config: Config): Promise<void> {
 
         await cola.marcarListo(item.id)
       } catch (e) {
+        // Sin cuota no es un fallo del correo: es el proveedor diciendo
+        // «ahora no». Seguir con los otros nueve sólo consigue nueve
+        // rechazos más y quemar lo que quede del cupo, así que se corta la
+        // tanda y se vuelve en el siguiente minuto. El correo se queda sin
+        // marcar, y por eso no se pierde.
+        if (e instanceof ErrorLLM && e.causa === 'cuota') {
+          log.warn({ messageId: item.messageId, esperar: e.esperar },
+            'sin cuota en el proveedor: dejo la tanda para el próximo minuto')
+          return
+        }
+
         log.error({ err: e, messageId: item.messageId }, 'fallo procesando')
+
+        // Un modelo que no existe o una clave mala tampoco son culpa del
+        // correo, y no se arreglan reintentando. Se corta igual, pero
+        // gritando: esto necesita que alguien toque la configuración.
+        if (e instanceof ErrorLLM && (e.causa === 'modelo' || e.causa === 'clave')) {
+          log.error({ causa: e.causa },
+            'HAY QUE ARREGLAR LA CONFIGURACIÓN: abre el asistente, bloque «El cerebro»')
+          return
+        }
+
         await cola.marcarError(item.id, String(e))
       }
     }
