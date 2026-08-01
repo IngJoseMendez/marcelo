@@ -6,6 +6,8 @@ import type { RepoAcciones } from '../repos/acciones.ts'
 import type { Clasificador } from './clasificador.ts'
 import type { Extractor } from './extractor.ts'
 import type { Desempate } from './desempate.ts'
+import type { ExtractorFinanzas } from './extractor-finanzas.ts'
+import type { ServicioTesoro } from '../servicios/tesoro.ts'
 import type { Confianza, CorreoCrudo, Proveedor } from '../dominio/tipos.ts'
 import { esRuidoObvio } from './prefiltro.ts'
 import { resolverReferente } from '../dominio/fechas.ts'
@@ -25,6 +27,9 @@ export interface DepsProcesador {
   calendario: SumideroCalendario
   remitentesIgnorados: readonly string[]
   remitentesSilenciados: readonly string[]
+  /** El libro contable. Sin él, los correos de plata se descartan. */
+  extractorFinanzas?: ExtractorFinanzas
+  tesoro?: ServicioTesoro
 }
 
 export interface ResultadoProceso {
@@ -52,6 +57,32 @@ export function crearProcesador(d: DepsProcesador) {
       // 3. Clasificar con el modelo barato.
       const { clasificacion } = await d.clasificador.clasificar(correo)
       await d.repoCorreos.marcarProcesado(correoId, clasificacion)
+
+      // 3b. Finanzas: registrar es lectura, así que va callada. La política
+      // lo dice explícitamente y por eso este camino no pasa por `decidir`:
+      // no hay nada que autorizar cuando lo único que se hace es anotar.
+      if (clasificacion === 'finanzas') {
+        if (!d.extractorFinanzas || !d.tesoro) {
+          return descartar('Finanzas todavía no está conectado')
+        }
+        const hecho = await d.extractorFinanzas.extraer(correo, correo.recibidoEn)
+        const r = await d.tesoro.registrar(hecho, correo, correoId)
+
+        if (r.estado === 'descartado') return descartar(r.motivo)
+        if (r.estado === 'repetido') {
+          // El banco reenvía, o Marcelo reenvía. Que no cuente dos veces es
+          // el punto entero del hash.
+          return descartar('Ese movimiento ya estaba anotado')
+        }
+        return {
+          decision: 'actuar_callado',
+          accionId: null,
+          motivo: r.estado === 'por_pagar'
+            ? 'Cuenta por pagar anotada'
+            : `Movimiento anotado: ${r.movimiento.contraparte}`,
+        }
+      }
+
       if (clasificacion !== 'agenda') return descartar(`Clasificado como ${clasificacion}`)
 
       // 4. Extraer hechos tipados.

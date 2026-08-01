@@ -131,15 +131,55 @@ function lineaDe(a: AccionDelDia, zona: string, hoy: DateTime, marcarEnsayo: boo
   return `${cabeza}\n    correo de ${nombreDe(a.correo.remitente)}${sello}`
 }
 
+/** Lo que pasó con la plata hoy, para el resumen. */
+export interface Plata {
+  cuantos: number
+  ingresos: number
+  egresos: number
+}
+
+export interface PorVencer {
+  acreedor: string
+  monto: string
+  diasRestantes: number
+}
+
+/** «💰  3 movimientos  +$1.240.000  −$89.900» */
+function lineaDePlata(p: Plata, comoPlata: (centavos: number) => string): string {
+  const partes = [`💰  ${p.cuantos} movimiento${p.cuantos === 1 ? '' : 's'}`]
+  if (p.ingresos > 0) partes.push(`+${comoPlata(p.ingresos)}`)
+  if (p.egresos > 0) partes.push(`−${comoPlata(p.egresos)}`)
+  return partes.join('  ')
+}
+
+function lineaDeVencimiento(c: PorVencer): string {
+  const cuando = c.diasRestantes < 0
+    ? `venció hace ${Math.abs(c.diasRestantes)} día${Math.abs(c.diasRestantes) === 1 ? '' : 's'}`
+    : c.diasRestantes === 0
+      ? 'vence hoy'
+      : c.diasRestantes === 1
+        ? 'vence mañana'
+        : `vence en ${c.diasRestantes} días`
+  return `⏰  ${cuando.charAt(0).toUpperCase()}${cuando.slice(1)}: ${c.acreedor} ${c.monto}`
+}
+
 /**
  * Devuelve el resumen, o `null` si ella no hizo nada.
  *
  * `ahora` manda la zona horaria y el «hoy» contra el que se nombran los
  * días: en UTC diría que canceló la clase cinco horas antes de cancelarla.
  */
+export interface Extras {
+  plata?: Plata | null
+  porVencer?: readonly PorVencer[]
+  /** Cómo se escribe una cifra. Lo inyecta quien sabe de qué moneda va. */
+  comoPlata?: (centavos: number) => string
+}
+
 export function armarResumen(
   acciones: readonly AccionDelDia[],
-  ahora: DateTime
+  ahora: DateTime,
+  extras: Extras = {}
 ): Resumen | null {
   // Lo pendiente nunca pasó y lo descartado tampoco; lo deshecho se
   // deshizo, y contarlo sería cobrar por un trabajo que ya no está hecho.
@@ -147,10 +187,16 @@ export function armarResumen(
     .filter((a) => a.porElla && (a.estado === 'aplicada' || a.estado === 'sombra'))
     .sort((x, y) => x.creadaEn.localeCompare(y.creadaEn))
 
-  if (suyas.length === 0) return null
+  const plata = extras.plata && extras.plata.cuantos > 0 ? extras.plata : null
+  const vencen = extras.porVencer ?? []
+
+  // Ahora hay tres razones para escribir de noche, no una. Callar porque no
+  // tocó el calendario, cuando le entró plata o cuando algo vence mañana,
+  // sería exactamente el fallo que este resumen intenta evitar.
+  if (suyas.length === 0 && !plata && vencen.length === 0) return null
 
   const zona = ahora.zoneName ?? 'America/Bogota'
-  const sombra = suyas.every((a) => a.ensayo)
+  const sombra = suyas.length > 0 && suyas.every((a) => a.ensayo)
   const mostradas = suyas.slice(0, MAXIMO)
 
   const cuerpo = mostradas
@@ -168,8 +214,23 @@ export function armarResumen(
     ? '\n\nSigo en modo sombra: no toqué tu calendario.'
     : ''
 
+  // El libro va aparte de la agenda y después: registrar es lectura, y lo
+  // que ella decidió por su cuenta pesa más que lo que sólo anotó.
+  const comoPlata = extras.comoPlata ?? ((c) => String(c))
+  const dinero = plata ? `\n\n${lineaDePlata(plata, comoPlata)}` : ''
+  const avisos = vencen.length > 0
+    ? `\n\n${vencen.map(lineaDeVencimiento).join('\n')}`
+    : ''
+
+  const nadaEnAgenda = suyas.length === 0
+  const texto = nadaEnAgenda
+    // Sin nada de agenda, la cabecera «hice esto por ti» sobra: lo único
+    // que hizo fue leer y anotar.
+    ? `🌙  Del día:${dinero}${avisos}`.replace('🌙  Del día:\n\n', '🌙  ')
+    : `${cabecera}\n\n${cuerpo}${cola}${pie}${dinero}${avisos}`
+
   return {
-    texto: `${cabecera}\n\n${cuerpo}${cola}${pie}`,
+    texto,
     deshacibles: suyas
       .filter((a) => a.estado === 'aplicada')
       .map((a) => {

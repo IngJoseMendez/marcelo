@@ -20,6 +20,8 @@ import { calcularInversa } from '../dominio/inversas.ts'
 import { aplicarConInversa, crearConInversa } from '../pipeline/actuador.ts'
 import { nuevoIdEvento } from '../dominio/identificadores.ts'
 import { calcularPrioridad, redondearDuracion } from '../dominio/intenciones.ts'
+import { enPalabras as pesos } from '../dominio/dinero.ts'
+import type { ServicioTesoro } from './tesoro.ts'
 
 export interface Instruccion {
   texto: string
@@ -63,6 +65,8 @@ export interface DepsInstruccion {
   deshacer: ServicioDeshacer
   calendarId: string
   nuevoId?: () => string
+  /** El libro contable. Sin él, contesta que todavía no lleva cuentas. */
+  tesoro?: ServicioTesoro
 }
 
 const DIAS_RRULE = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'] as const
@@ -122,6 +126,43 @@ export function crearServicioInstruccion(d: DepsInstruccion) {
     return {
       herramienta: 'consultar_agenda' as const, estado: 'respuesta' as const, entendido,
       respuesta: `${porVenir.length > 0 ? `Te queda ${cuando}` : `${cuando.charAt(0).toUpperCase()}${cuando.slice(1)}`}: ${lista}.${hueco}`,
+    }
+  }
+
+  // ── consultar la plata ───────────────────────────────────────
+  async function consultarFinanzas(): Promise<ResultadoOrden> {
+    const entendido = 'preguntar por la plata'
+    if (!d.tesoro) {
+      return {
+        herramienta: 'consultar_finanzas', estado: 'respuesta', entendido,
+        respuesta: 'Todavía no llevo tus cuentas: falta conectar el libro contable.',
+      }
+    }
+
+    const b = await d.tesoro.balance()
+    if (b.movimientos.length === 0) {
+      return {
+        herramienta: 'consultar_finanzas', estado: 'respuesta', entendido,
+        respuesta: 'Este mes no he anotado ningún movimiento todavía.',
+      }
+    }
+
+    const mayor = b.porCategoria[0]
+    const vence = b.cuentasPorPagar[0]
+
+    const partes = [
+      `Este mes: ${pesos(b.ingresos)} entraron y ${pesos(b.egresos)} salieron`,
+      `(${b.neto >= 0 ? 'te quedan' : 'vas en rojo'} ${pesos(Math.abs(b.neto))}).`,
+    ]
+    if (mayor) partes.push(`Donde más se fue: ${mayor.nombre}, ${pesos(mayor.total)}.`)
+    if (vence) {
+      partes.push(`Ojo: ${vence.acreedor} ${pesos(vence.monto)} vence`
+        + `${vence.diasRestantes <= 0 ? ' ya' : ` en ${vence.diasRestantes} día${vence.diasRestantes === 1 ? '' : 's'}`}.`)
+    }
+
+    return {
+      herramienta: 'consultar_finanzas', estado: 'respuesta', entendido,
+      respuesta: partes.join(' '),
     }
   }
 
@@ -383,11 +424,7 @@ export function crearServicioInstruccion(d: DepsInstruccion) {
         return consultarAgenda(orden)
 
       case 'consultar_finanzas':
-        return {
-          herramienta: 'consultar_finanzas', estado: 'respuesta',
-          entendido: 'preguntar por la plata',
-          respuesta: 'Todavía no llevo tus cuentas: eso entra con el módulo financiero.',
-        }
+        return consultarFinanzas()
 
       case 'cancelar':
       case 'mover':

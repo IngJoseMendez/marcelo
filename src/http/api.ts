@@ -11,6 +11,7 @@ import type { ServicioCronica } from '../servicios/cronica.ts'
 import type { ServicioAgenda } from '../servicios/agendar.ts'
 import type { ServicioDeshacer } from '../servicios/deshacer.ts'
 import type { ServicioInstruccion } from '../servicios/instruccion.ts'
+import type { ServicioTesoro } from '../servicios/tesoro.ts'
 import type { Transcriptor } from '../puertos/transcriptor.ts'
 import { esDeVoz, firmarVoz } from '../dominio/firma-voz.ts'
 import { DURACIONES, calcularPrioridad, redondearDuracion } from '../dominio/intenciones.ts'
@@ -32,8 +33,11 @@ export interface DepsApi {
   secretoVoz: string
   repoIntenciones: RepoIntenciones
   repoCompromisos: RepoCompromisos
+  /** El libro contable. Sin él, la pantalla Tesoro lo dice en vez de mentir. */
+  tesoro?: ServicioTesoro
 }
 
+const Mes = z.object({ mes: z.string().regex(/^\d{4}-\d{2}/).optional() })
 const Fecha = z.object({ fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() })
 const Dias = z.object({ dias: z.coerce.number().int().min(1).max(90).default(14) })
 const Id = z.object({ id: z.coerce.number().int().positive() })
@@ -169,6 +173,14 @@ export function registrarApi(app: FastifyInstance, d: DepsApi): void {
     api.get('/pactos', async () => ({
       compromisos: await d.repoCompromisos.listarActivos(),
     }))
+
+    api.get('/tesoro', async (req) => {
+      if (!d.tesoro) {
+        return { disponible: false, motivo: 'El libro contable no está conectado' }
+      }
+      const { mes } = Mes.parse(req.query)
+      return { disponible: true, ...(await d.tesoro.balance(mes)) }
+    })
 
     // ── el canal de instrucciones ──────────────────────────────
 

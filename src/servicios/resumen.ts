@@ -4,6 +4,8 @@ import type { ServicioCronica } from './cronica.ts'
 import {
   armarResumen, avisoDeAccion, botonDeshacer, type Deshacible, type Resumen,
 } from '../dominio/resumen.ts'
+import { enPalabras } from '../dominio/dinero.ts'
+import type { ServicioTesoro } from './tesoro.ts'
 
 export interface DepsResumen {
   reloj: Reloj
@@ -11,6 +13,8 @@ export interface DepsResumen {
   notificador: Notificador
   /** Para el botón «Ver detalle». Sin ella, no se ofrece el botón. */
   urlApp?: string
+  /** El libro contable. Sin él, el resumen es sólo de agenda. */
+  tesoro?: ServicioTesoro
 }
 
 export interface Envio {
@@ -43,7 +47,20 @@ export function crearServicioResumen(d: DepsResumen) {
 
   async function delTramo(desdeIso: string, hastaIso: string): Promise<Resumen | null> {
     const ahora = d.reloj.ahora()
-    return armarResumen(await d.cronica.entre(desdeIso, hastaIso), ahora)
+    const acciones = await d.cronica.entre(desdeIso, hastaIso)
+
+    // El libro sólo entra si está conectado. Sin él, el resumen es el de
+    // siempre y no aparece una línea de plata en cero, que sería peor.
+    const plata = d.tesoro ? await d.tesoro.delDia() : null
+    const porVencer = d.tesoro ? await d.tesoro.porVencer() : []
+
+    return armarResumen(acciones, ahora, {
+      plata,
+      porVencer: porVencer.map((c) => ({
+        acreedor: c.acreedor, monto: c.monto, diasRestantes: c.diasRestantes,
+      })),
+      comoPlata: (centavos) => enPalabras(centavos, 'COP'),
+    })
   }
 
   return {

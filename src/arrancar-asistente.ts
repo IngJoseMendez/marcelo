@@ -22,6 +22,9 @@ import { crearRepoAcciones } from './repos/acciones.ts'
 import { crearRepoCola } from './repos/cola.ts'
 import { crearRepoIntenciones } from './repos/intenciones.ts'
 import { crearRepoReglas } from './repos/reglas.ts'
+import { crearRepoCuentasPorPagar, crearRepoMovimientos } from './repos/movimientos.ts'
+import { crearExtractorFinanzas } from './pipeline/extractor-finanzas.ts'
+import { crearServicioTesoro } from './servicios/tesoro.ts'
 import { crearInterprete } from './pipeline/interprete.ts'
 import { crearServicioJornada } from './servicios/jornada.ts'
 import { crearServicioCronica } from './servicios/cronica.ts'
@@ -140,6 +143,15 @@ export async function arrancarAsistente(config: Config): Promise<void> {
     remitentesSilenciados.splice(0, remitentesSilenciados.length, ...silenciar)
   }
 
+  // ── El libro contable ─────────────────────────────────────────
+  // Registrar es lectura: no hay ningún camino por el que pueda pagar,
+  // transferir ni autorizar nada. Riesgo cero por diseño.
+  const tesoro = crearServicioTesoro({
+    reloj,
+    repoMovimientos: crearRepoMovimientos(db),
+    repoCuentas: crearRepoCuentasPorPagar(db),
+  })
+
   const procesador = crearProcesador({
     reloj,
     repoCompromisos,
@@ -151,6 +163,8 @@ export async function arrancarAsistente(config: Config): Promise<void> {
     calendario,
     remitentesIgnorados,
     remitentesSilenciados,
+    extractorFinanzas: crearExtractorFinanzas(llm, config.groq.modeloExtractor),
+    tesoro,
   })
 
   const sync = crearSincronizacion(db, cola)
@@ -172,7 +186,7 @@ export async function arrancarAsistente(config: Config): Promise<void> {
 
   const resumen = canal
     ? crearServicioResumen({
-        reloj, cronica, notificador: canal.notificador, urlApp: config.urlApp,
+        reloj, cronica, notificador: canal.notificador, urlApp: config.urlApp, tesoro,
       })
     : null
 
@@ -249,6 +263,7 @@ export async function arrancarAsistente(config: Config): Promise<void> {
     jornada,
     deshacer,
     calendarId: config.google.calendarId,
+    tesoro,
   })
 
   // Telegram y la app son dos entradas del mismo intérprete: lo único que
@@ -282,6 +297,7 @@ export async function arrancarAsistente(config: Config): Promise<void> {
         .update('firma-de-voz').digest('hex'),
       repoIntenciones,
       repoCompromisos,
+      tesoro,
     },
   })
 
