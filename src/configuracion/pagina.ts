@@ -499,7 +499,7 @@ async function cargarProveedores() {
 
 async function refrescarVersion() {
   var v = await (await fetch("/api/version")).json();
-  var caja = $("[data-bloque=\"actualizar\"]");
+  var caja = $('[data-bloque="actualizar"]');
   if (!caja) return;
   caja.dataset.salud = !v.esRepo ? "pendiente" : v.hayQueActualizar ? "parcial" : "listo";
   $(".detalle", caja).textContent = !v.esRepo ? "no se sabe"
